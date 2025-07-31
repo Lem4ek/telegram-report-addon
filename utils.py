@@ -18,7 +18,7 @@ def extract_data(text):
             if key == "экструзия":
                 results[key] = sum(int(g) for g in match.groups() if g)
             elif key == "флекса":
-                results[key] = int(match.group(2))
+                results[key] = int(match.group(2))  # флекса — вторая группа
             else:
                 results[key] = int(match.group(1))
     return results
