@@ -1,0 +1,15 @@
+{
+  "name": "BNK Telegram Bot",
+  "version": "1.0",
+  "slug": "bnk_bot",
+  "description": "Бот для сбора сменных отчётов с Telegram",
+  "arch": ["aarch64", "armv7", "amd64"],
+  "startup": "application",
+  "boot": "auto",
+  "options": {
+    "telegram_token": ""
+  },
+  "schema": {
+    "telegram_token": "str"
+  }
+}
