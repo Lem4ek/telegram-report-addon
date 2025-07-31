@@ -1,67 +1,53 @@
-import re, csv, os, json
+import csv, os, json
 from datetime import datetime
 
-PATTERNS = {
-    "паков": r"Паков\s*[-:–—]?\s*(\d+)",
-    "вес": r"Вес\s*[-:–—]?\s*(\d+)",
-    "пакетосварка": r"Пакетосварка\s*[-:–—]?\s*(\d+)",
-    "флекса": r"(Флекса|Флексография)\s*[-:–—]?\s*(\d+)",
-    "экструзия": r"Экструзия[^\d]*(\d+)?[^\d]*(\d+)?",
-    "итого": r"Итого\s*[-:–—]?\s*(\d+)"
-}
-
 def extract_data(text):
+    keys = ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия", "Итого", "Брак"]
     results = {}
-    for key, pattern in PATTERNS.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            if key == "экструзия":
-                results[key] = sum(int(g) for g in match.groups() if g)
-            elif key == "флекса":
-                results[key] = int(match.group(2))  # флекса — вторая группа
-            else:
-                results[key] = int(match.group(1))
+    for key in keys:
+        for line in text.splitlines():
+            if key in line:
+                part = line.split()
+                for item in part:
+                    try:
+                        results[key] = int(item)
+                        break
+                    except:
+                        continue
     return results
 
-def format_report(parsed):
-    lines = ["📦 Отчёт за смену:\n"]
-    if "паков" in parsed: lines.append(f"🧮 Паков: {parsed['паков']} шт")
-    if "вес" in parsed: lines.append(f"⚖️ Вес: {parsed['вес']} кг")
-    lines.append("\n♻️ Отходы:")
-    if "пакетосварка" in parsed: lines.append(f"🔧 Пакетосварка: {parsed['пакетосварка']} кг")
-    if "флекса" in parsed: lines.append(f"🖨️ Флекса: {parsed['флекса']} кг")
-    if "экструзия" in parsed: lines.append(f"🧵 Экструзия: {parsed['экструзия']} кг")
-    if "итого" in parsed: lines.append(f"\n🧾 Итого отходов: {parsed['итого']} кг")
-    return "\n".join(lines)
+def format_report(data):
+    return "\n".join([f"{k}: {v}" for k, v in data.items()])
 
-def append_to_csv(file, user, parsed):
-    exists = os.path.exists(file)
+def append_to_csv(file, user, data):
+    os.makedirs(os.path.dirname(file), exist_ok=True)
+    now = datetime.now()
+    row = [now.strftime("%d.%m.%Y"), now.strftime("%H:%M"), user]
+    for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия", "Итого", "Брак"]:
+        row.append(data.get(key, ""))
+    write_header = not os.path.exists(file) or os.stat(file).st_size == 0
     with open(file, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        if not exists:
-            writer.writerow(["Дата", "Пользователь", "Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия", "Итого"])
-        row = [
-            datetime.now().strftime("%Y-%m-%d %H:%M"),
-            user,
-            parsed.get("паков", ""),
-            parsed.get("вес", ""),
-            parsed.get("пакетосварка", ""),
-            parsed.get("флекса", ""),
-            parsed.get("экструзия", ""),
-            parsed.get("итого", "")
-        ]
+        if write_header:
+            writer.writerow(["Дата", "Время", "Пользователь", "Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия", "Итого", "Брак"])
         writer.writerow(row)
 
 def load_users(path):
-    return json.load(open(path)) if os.path.exists(path) else {}
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
 
-def save_users(path, data):
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+def save_users(path, users):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(users, f)
 
-def get_stats(file):
-    if not os.path.exists(file):
-        return "Нет данных."
-    with open(file, encoding="utf-8") as f:
-        lines = f.readlines()[1:]
-    return f"👥 Всего записей: {len(lines)}"
+def get_stats(users):
+    lines = []
+    for user, data in users.items():
+        p = data.get("product", 0)
+        w = data.get("waste", 0)
+        ratio = round(p / w, 1) if w else "∞"
+        lines.append(f"{user}: продукция={p}, брак={w}, соотношение={ratio}")
+    return "\n".join(lines)
