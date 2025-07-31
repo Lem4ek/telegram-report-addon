@@ -21,7 +21,7 @@ def extract_data(text):
     return results
 
 def format_report(parsed, stats):
-    report = "📊 Отчет:
+    report = "📊 Отчет:"
 "
     for k, v in parsed.items():
         report += f"{k}: {v}\n"
