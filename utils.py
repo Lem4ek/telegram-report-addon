@@ -20,7 +20,7 @@ def extract_data(text):
             elif key == "флекса":
                 results[key] = int(match.group(2))
             else:
-                results[key] = int(match.group(1)))
+                results[key] = int(match.group(1))
     return results
 
 def format_report(parsed):
