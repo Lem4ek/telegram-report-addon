@@ -1,6 +1,13 @@
 import os
+import asyncio
 from telegram import Update, BotCommand
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    CommandHandler,
+    ContextTypes,
+    filters,
+)
 from data_utils import save_data, export_excel, reset_month_data, get_user_stats
 from parser import extract_report_data
 
@@ -41,7 +48,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats = get_user_stats(data_file_dir)
     await update.message.reply_text(stats)
 
-if __name__ == "__main__":
+async def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
@@ -52,8 +59,11 @@ if __name__ == "__main__":
     bot_commands = [
         BotCommand("csv", "📁 Получить Excel-файл"),
         BotCommand("reset", "♻️ Сбросить данные"),
-        BotCommand("stats", "📊 Показать статистику")
+        BotCommand("stats", "📊 Показать статистику"),
     ]
-    app.bot.set_my_commands(bot_commands)
+    await app.bot.set_my_commands(bot_commands)
 
-    app.run_polling()
+    await app.run_polling()
+
+if __name__ == "__main__":
+    asyncio.run(main())
