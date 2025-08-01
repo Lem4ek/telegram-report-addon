@@ -1,0 +1,16 @@
+name: Telegram Excel Report Bot
+version: "1.0"
+slug: telegram_report_bot
+description: Бот для учёта продукции и брака с сохранением в Excel
+startup: application
+boot: auto
+homeassistant: 2024.0.0
+arch:
+  - aarch64
+  - armv7
+  - amd64
+init: false
+options:
+  TELEGRAM_TOKEN: ""
+schema:
+  TELEGRAM_TOKEN: str
