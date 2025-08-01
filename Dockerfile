@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-COPY app /app
+COPY app/ /app/
 COPY requirements.txt ./
 COPY run.sh /run.sh
 
