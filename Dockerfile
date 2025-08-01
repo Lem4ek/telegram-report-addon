@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-COPY app /app
+COPY app/ /app/         # Обрати внимание на слэш в конце
 COPY requirements.txt ./
 COPY run.sh /run.sh
 
