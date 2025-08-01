@@ -1,4 +1,7 @@
 #!/bin/bash
 chmod -R 755 /app
-export TELEGRAM_TOKEN="$(jq -r '.TELEGRAM_TOKEN' /data/options.json)"
+
+TELEGRAM_TOKEN=$(cat /data/options.json | grep TELEGRAM_TOKEN | cut -d '"' -f4)
+
+export TELEGRAM_TOKEN
 python3 /app/main.py
