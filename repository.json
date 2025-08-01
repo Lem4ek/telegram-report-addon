@@ -1,0 +1,28 @@
+---
+
+## 📄 `repository.json`
+```json
+{
+  "name": "Telegram Report Add-on",
+  "url": "https://github.com/<твой_логин>/telegram-report-addon",
+  "maintainer": "@<твой_телеграм>",
+  "addons": [
+    {
+      "slug": "telegram_report_bot",
+      "name": "Telegram Excel Report Bot",
+      "version": "1.0",
+      "description": "Бот для подсчёта продукции и отходов с сохранением в Excel",
+      "startup": "application",
+      "boot": "auto",
+      "arch": ["armv7", "aarch64", "amd64"],
+      "init": false,
+      "options": {
+        "TELEGRAM_TOKEN": ""
+      },
+      "schema": {
+        "TELEGRAM_TOKEN": "str"
+      },
+      "url": "https://github.com/<твой_логин>/telegram-report-addon"
+    }
+  ]
+}
