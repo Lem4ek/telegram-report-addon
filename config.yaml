@@ -9,6 +9,6 @@ arch:
 startup: services
 boot: auto
 options:
-  TELEGRAM_TOKEN: "REPLACE_ME"
+  TELEGRAM_TOKEN: "8199873882:AAE4x2ARLf7bR0fC9ykeOyHsrinT9JPIdRM"
 schema:
   TELEGRAM_TOKEN: str
