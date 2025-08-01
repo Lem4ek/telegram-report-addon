@@ -1,9 +1,5 @@
----
-
-## 📄 `repository.json`
-```json
 {
-  "name": "Telegram Report Add-on",
+  "name": "BNK Telegram Report Add-on",
   "url": "https://github.com/<твой_логин>/telegram-report-addon",
   "maintainer": "@<твой_телеграм>",
   "addons": [
