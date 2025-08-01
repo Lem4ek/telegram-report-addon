@@ -47,25 +47,22 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats = get_user_stats(data_file_dir)
     await update.message.reply_text(stats)
 
-# Запуск бота
-app = ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-app.add_handler(CommandHandler("csv", cmd_csv))
-app.add_handler(CommandHandler("reset", cmd_reset))
-app.add_handler(CommandHandler("stats", cmd_stats))
-
-# Устанавливаем команды
-async def set_bot_commands():
+# 👇 post_init: принимает аргумент
+async def set_bot_commands(application):
     bot_commands = [
         BotCommand("csv", "📁 Получить Excel-файл"),
         BotCommand("reset", "♻️ Сбросить данные"),
         BotCommand("stats", "📊 Показать статистику"),
     ]
-    await app.bot.set_my_commands(bot_commands)
+    await application.bot.set_my_commands(bot_commands)
 
-# Фоновая задача
-app.post_init = set_bot_commands
+# 👇 Сборка и запуск приложения
+app = ApplicationBuilder().token(TOKEN).post_init(set_bot_commands).build()
+
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app.add_handler(CommandHandler("csv", cmd_csv))
+app.add_handler(CommandHandler("reset", cmd_reset))
+app.add_handler(CommandHandler("stats", cmd_stats))
 
 if __name__ == "__main__":
     app.run_polling()
