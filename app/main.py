@@ -29,15 +29,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     parsed_data = extract_report_data(text)
     if parsed_data:
         save_data(parsed_data, user_name, user_id, data_file_dir)
-        reply = (
-            f"Принято от {user_name}:"
-            f"📦 Паков: {parsed_data.get('Паков', 0)}"
-            f"⚖️ Вес: {parsed_data.get('Вес', 0)}"
-            f"♻️ Отходы:"
-            f"  🧵 Пакетосварка: {parsed_data.get('Пакетосварка', 0)}"
-            f"  🎨 Флекса: {parsed_data.get('Флекса', 0)}"
-            f"  🏭 Экструзия: {parsed_data.get('Экструзия', '—').replace('Экструзия', '').strip()}"
-            f"♻️ Итого отходов: {parsed_data.get('Итого', 0)}"
+        response_text = (
+            f"Принято от {user_name}:\n"
+            f"📦 Паков: {data['Паков']}\n"
+            f"⚖️ Вес: {data['Вес']}\n"
+            f"♻️ Отходы:\n"
+            f"  🧵 Пакетосварка: {data['Пакетосварка']}\n"
+            f"  🎨 Флекса: {data['Флекса']}\n"
+            f"  🏭 Экструзия: {data['Экструзия']}\n"
+            f"♻️ Итого отходов: {data['Итого']}"
         )
         await update.message.reply_text(reply)
     else:
