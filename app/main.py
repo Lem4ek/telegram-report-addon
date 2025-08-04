@@ -1,5 +1,6 @@
 import os
 from telegram import Update, BotCommand
+from telegram.constants import ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     MessageHandler,
@@ -41,7 +42,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 "
             f"  🎨 Флекса: {parsed_data.get('Флекса', 0)}
 "
-            f"  🏭 Экструзия: {parsed_data.get('Экструзия', '—')}
+            f"  🏭 Экструзия: {parsed_data.get('Экструзия', '—').replace('Экструзия', '').strip()}
 "
             f"♻️ Итого отходов: {parsed_data.get('Итого', 0)}"
         )
@@ -52,7 +53,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_path = export_excel(data_file_dir)
     if file_path:
-        await update.message.reply_document(open(file_path, "rb"))
+        await update.message.reply_document(open(file_path, "rb"), caption="📄 Excel-отчёт за месяц")
     else:
         await update.message.reply_text("❌ Нет данных за текущий месяц.")
 
@@ -62,7 +63,7 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats = get_user_stats(data_file_dir)
-    await update.message.reply_text(stats)
+    await update.message.reply_text(stats, parse_mode=ParseMode.HTML)
 
 async def set_bot_commands(application):
     bot_commands = [
