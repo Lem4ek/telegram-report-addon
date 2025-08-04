@@ -1,5 +1,5 @@
 name: Telegram Excel Report Bot
-version: "2.1"
+version: "2.2"
 slug: telegram_report_bot
 description: Бот для учёта продукции и брака с сохранением в Excel
 startup: application
