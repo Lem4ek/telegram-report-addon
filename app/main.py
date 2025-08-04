@@ -1,112 +1,84 @@
 import os
-import re
-import asyncio
-import pandas as pd
-from datetime import datetime
 from telegram import Update, BotCommand
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.constants import ParseMode
+from telegram.ext import (
+    ApplicationBuilder,
+    MessageHandler,
+    CommandHandler,
+    ContextTypes,
+    filters,
+)
+from data_utils import save_data, export_excel, reset_month_data, get_user_stats
+from parser import extract_report_data
 
-DATA_FOLDER = "/config/bnk_bot/data"
-FILE_NAME = f"{datetime.now().strftime('%Y-%m')}.xlsx"
-FILE_PATH = os.path.join(DATA_FOLDER, FILE_NAME)
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+if not TOKEN:
+    raise ValueError("TELEGRAM_TOKEN env variable is required")
 
-os.makedirs(DATA_FOLDER, exist_ok=True)
-
-data_columns = ["User", "Дата", "Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия", "Итого"]
-
-if not os.path.exists(FILE_PATH):
-    df = pd.DataFrame(columns=data_columns)
-    df.to_excel(FILE_PATH, index=False)
-
-COMMANDS = [
-    BotCommand("csv", "📄 Скачать таблицу"),
-    BotCommand("reset", "♻️ Сбросить данные"),
-    BotCommand("stats", "📊 Показать статистику")
-]
-
-def extract_data_from_message(text):
-    data = {
-        "Паков": 0,
-        "Вес": 0,
-        "Пакетосварка": 0,
-        "Флекса": 0,
-        "Экструзия": "",
-        "Итого": 0
-    }
-    for line in text.splitlines():
-        if "паков" in line.lower():
-            data["Паков"] = int(re.findall(r'\d+', line)[0])
-        elif "вес" in line.lower():
-            data["Вес"] = int(re.findall(r'\d+', line)[0])
-        elif "пакетосварка" in line.lower():
-            data["Пакетосварка"] = int(re.findall(r'\d+', line)[0])
-        elif "флекс" in line.lower():
-            data["Флекса"] = int(re.findall(r'\d+', line)[0])
-        elif "экструзия" in line.lower():
-            match = re.search(r"м\d+ т\d+", line)
-            if match:
-                data["Экструзия"] = match.group()
-        elif "итого" in line.lower():
-            data["Итого"] = int(re.findall(r'\d+', line)[0])
-    return data
+data_file_dir = "/config/bnk_bot/data"
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_name = user.username or user.first_name
-    data = extract_data_from_message(update.message.text)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    df = pd.read_excel(FILE_PATH)
-    df.loc[len(df)] = [user_name, now, data["Паков"], data["Вес"], data["Пакетосварка"], data["Флекса"], data["Экструзия"], data["Итого"]]
-    df.to_excel(FILE_PATH, index=False)
-
-    message = [
-        f"Принято от {user_name}:",
-        f"📦 Паков: {data['Паков']}",
-        f"⚖️ Вес: {data['Вес']}",
-        f"♻️ Отходы:",
-        f"  🧵 Пакетосварка: {data['Пакетосварка']}",
-        f"  🎨 Флекса: {data['Флекса']}",
-        f"  🏭 Экструзия: {data['Экструзия']}",
-        f"♻️ Итого отходов: {data['Итого']}"
-    ]
-    await update.message.reply_text("\n".join(message))
-
-async def send_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    df = pd.read_excel(FILE_PATH)
-    df = df.copy()
-    df["Экструзия"] = df["Экструзия"].str.replace("экструзия", "", case=False, regex=False).str.strip()
-    temp_path = FILE_PATH.replace(".xlsx", "_copy.xlsx")
-    df.to_excel(temp_path, index=False)
-    await update.message.reply_document(document=open(temp_path, "rb"))
-
-async def reset_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    pd.DataFrame(columns=data_columns).to_excel(FILE_PATH, index=False)
-    await update.message.reply_text("Данные сброшены 🧹")
-
-async def send_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    df = pd.read_excel(FILE_PATH)
-    if df.empty:
-        await update.message.reply_text("Данных нет.")
+    if not update.message or not update.message.text:
         return
 
-    summary = df.groupby("User")[["Паков", "Вес", "Пакетосварка", "Флекса", "Итого"]].sum()
-    report_lines = ["📊 Статистика по пользователям:"]
-    for user, row in summary.iterrows():
-        report_lines.append(f"👤 {user}: 📦{row['Паков']} ⚖️{row['Вес']} 🧵{row['Пакетосварка']} 🎨{row['Флекса']} ♻️{row['Итого']}")
-    await update.message.reply_text("\n".join(report_lines))
+    text = update.message.text
+    user = update.effective_user
+    user_name = user.full_name if user else "Unknown"
+    user_id = user.id if user else 0
 
-async def main():
-    token = os.getenv("TELEGRAM_TOKEN")
-    app = ApplicationBuilder().token(token).build()
+    parsed_data = extract_report_data(text)
+    if parsed_data:
+        save_data(parsed_data, user_name, user_id, data_file_dir)
+        reply = (
+            f"Принято от {user_name}:
+"
+            f"📦 Паков: {parsed_data.get('Паков', 0)}
+"
+            f"⚖️ Вес: {parsed_data.get('Вес', 0)}
+"
+            f"♻️ Отходы:
+"
+            f"  🧵 Пакетосварка: {parsed_data.get('Пакетосварка', 0)}
+"
+            f"  🎨 Флекса: {parsed_data.get('Флекса', 0)}
+"
+            f"  🏭 Экструзия: {parsed_data.get('Экструзия', '—').replace('Экструзия', '').strip()}
+"
+            f"♻️ Итого отходов: {parsed_data.get('Итого', 0)}"
+        )
+        await update.message.reply_text(reply)
+    else:
+        await update.message.reply_text("⚠️ Не удалось распознать данные.")
 
-    app.add_handler(CommandHandler("csv", send_csv))
-    app.add_handler(CommandHandler("reset", reset_data))
-    app.add_handler(CommandHandler("stats", send_stats))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+async def cmd_csv(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file_path = export_excel(data_file_dir)
+    if file_path:
+        await update.message.reply_document(open(file_path, "rb"), caption="📄 Excel-отчёт за месяц")
+    else:
+        await update.message.reply_text("❌ Нет данных за текущий месяц.")
 
-    await app.bot.set_my_commands(COMMANDS)
-    await app.run_polling()
+async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    reset_month_data(data_file_dir)
+    await update.message.reply_text("♻️ Данные сброшены!")
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    stats = get_user_stats(data_file_dir)
+    await update.message.reply_text(stats, parse_mode=ParseMode.HTML)
+
+async def set_bot_commands(application):
+    bot_commands = [
+        BotCommand("csv", "📁 Получить Excel-файл"),
+        BotCommand("reset", "♻️ Сбросить данные"),
+        BotCommand("stats", "📊 Показать статистику"),
+    ]
+    await application.bot.set_my_commands(bot_commands)
+
+app = ApplicationBuilder().token(TOKEN).post_init(set_bot_commands).build()
+
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app.add_handler(CommandHandler("csv", cmd_csv))
+app.add_handler(CommandHandler("reset", cmd_reset))
+app.add_handler(CommandHandler("stats", cmd_stats))
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    app.run_polling()
