@@ -7,6 +7,7 @@ import os
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 user_stats = {}
+current_month = datetime.now().month  # для авто-сброса
 
 def safe_int(value):
     try:
@@ -15,6 +16,14 @@ def safe_int(value):
         return 0
 
 async def handle_message(update, context):
+    global current_month, user_stats
+
+    # Авто-сброс в начале месяца
+    month_now = datetime.now().month
+    if month_now != current_month:
+        user_stats.clear()
+        current_month = month_now
+
     if not update.message or not update.message.text:
         return
 
@@ -66,12 +75,18 @@ async def cmd_csv(update, context):
 async def cmd_stats(update, context):
     await update.message.reply_text(generate_stats(user_stats))
 
+async def cmd_reset(update, context):
+    global user_stats
+    user_stats.clear()
+    await update.message.reply_text("♻️ Статистика за текущий месяц сброшена! (Excel не тронут)")
+
 def main():
     if not TOKEN:
         raise ValueError("TELEGRAM_TOKEN env variable is required")
     app = ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("csv", cmd_csv))
     app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
