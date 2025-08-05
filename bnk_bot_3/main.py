@@ -1,9 +1,8 @@
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler
 from parser import parse_message
 from data_utils import save_entry, generate_stats, get_csv_file
 from datetime import datetime
 import os
-import asyncio
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
