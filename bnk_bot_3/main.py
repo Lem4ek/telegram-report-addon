@@ -6,6 +6,9 @@ import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
+# Список разрешённых пользователей (по имени или ID)
+ALLOWED_USERS = [123456789, 987654321]  # замени на свои ID
+
 user_stats = {}
 current_month = datetime.now().month  # для авто-сброса
 
@@ -15,8 +18,22 @@ def safe_int(value):
     except (ValueError, TypeError):
         return 0
 
+def is_allowed(update):
+    username = update.effective_user.first_name
+    user_id = update.effective_user.id
+    return username in ALLOWED_USERS or user_id in ALLOWED_USERS
+
 async def handle_message(update, context):
     global current_month, user_stats
+
+    # Сообщаем пользователю его ID, если он ещё не в ALLOWED_USERS
+    user_id = update.effective_user.id
+    if user_id not in ALLOWED_USERS:
+        await update.message.reply_text(
+            f"ℹ️ Ваш Telegram ID: `{user_id}`\n"
+            f"Передайте его администратору для получения доступа.",
+            parse_mode="Markdown"
+        )
 
     # Авто-сброс в начале месяца
     month_now = datetime.now().month
@@ -76,13 +93,22 @@ async def handle_message(update, context):
     await update.message.reply_text(report.strip())
 
 async def cmd_csv(update, context):
+    if not is_allowed(update):
+        await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
+        return
     file_path = get_csv_file()
     await update.message.reply_document(open(file_path, 'rb'))
 
 async def cmd_stats(update, context):
+    if not is_allowed(update):
+        await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
+        return
     await update.message.reply_text(generate_stats(user_stats))
 
 async def cmd_reset(update, context):
+    if not is_allowed(update):
+        await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
+        return
     global user_stats
     user_stats.clear()
     await update.message.reply_text("♻️ Статистика за текущий месяц сброшена! (Excel не тронут)")
