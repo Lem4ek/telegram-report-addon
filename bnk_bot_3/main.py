@@ -11,16 +11,50 @@ user_stats = {}
 async def handle_message(update, context):
     if not update.message or not update.message.text:
         return
+
     username = update.effective_user.first_name
     text = update.message.text
     values = parse_message(text)
+
     if values:
+        # Заполняем отсутствующие ключи нулями
+        for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
+            values.setdefault(key, 0)
+
+        # Пересчитываем Итого отходов
+        values["Итого"] = (
+            values.get("Пакетосварка", 0)
+            + values.get("Флекса", 0)
+            + values.get("Экструзия", 0)
+        )
+
+        # Сохраняем в Excel с пересчитанным Итого
         save_entry(datetime.now(), username, values)
-        user_stats.setdefault(username, {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0, 'Флекса': 0, 'Итого': 0})
+
+        # Обновляем статистику по пользователю
+        user_stats.setdefault(username, {
+            'Паков': 0, 'Вес': 0,
+            'Пакетосварка': 0, 'Флекса': 0,
+            'Экструзия': 0, 'Итого': 0
+        })
         for k in values:
-            if k in user_stats[username]:
+            if k in user_stats[username] and isinstance(values[k], (int, float)):
                 user_stats[username][k] += values[k]
-        await update.message.reply_text("✅ Данные записаны.")
+
+        # Формируем красивый ответ
+        report = (
+            "📦 Отчёт за смену:\n\n"
+            f"🧮 Паков: {values['Паков']} шт\n"
+            f"⚖️ Вес: {values['Вес']} кг\n\n"
+            "♻️ Отходы:\n"
+            f"🔧 Пакетосварка: {values['Пакетосварка']} кг\n"
+            f"🖨️ Флекса: {values['Флекса']} кг\n"
+            f"🧵 Экструзия: {values['Экструзия']} кг\n\n"
+            f"🧾 Итого отходов: {values['Итого']} кг"
+        )
+
+        await update.message.reply_text(report)
+
 
 async def cmd_csv(update, context):
     file_path = get_csv_file()
