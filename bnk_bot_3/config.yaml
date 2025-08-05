@@ -12,6 +12,8 @@ build: .
 arch:
   - aarch64
 options:
-  TELEGRAM_TOKEN: ""
+  TELEGRAM_TOKEN: "8199873882:AAE4x2ARLf7bR0fC9ykeOyHsrinT9JPIdRM"
 schema:
   TELEGRAM_TOKEN: str
+environment:
+  TELEGRAM_TOKEN: "{options.TELEGRAM_TOKEN}"  
