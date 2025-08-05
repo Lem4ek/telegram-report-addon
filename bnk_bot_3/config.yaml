@@ -1,5 +1,5 @@
 name: BNK Bot 111
-version: "1.004"
+version: "1.005"
 slug: bnk_bot_3
 description: Telegram-бот для учёта продукции и брака
 startup: application
