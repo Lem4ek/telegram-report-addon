@@ -8,7 +8,6 @@ host_network: true
 hassio_api: true
 hassio_role: default
 init: false
-image: local/bnk-bot-3
 build: .
 arch:
   - aarch64
