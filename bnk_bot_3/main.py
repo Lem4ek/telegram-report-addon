@@ -8,6 +8,12 @@ TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 user_stats = {}
 
+def safe_int(value):
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
+
 async def handle_message(update, context):
     if not update.message or not update.message.text:
         return
@@ -17,43 +23,41 @@ async def handle_message(update, context):
     values = parse_message(text)
 
     if values:
-        # Заполняем отсутствующие ключи нулями
         for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
             values.setdefault(key, 0)
 
-        # Пересчитываем Итого отходов
-        pak = int(values.get("Пакетосварка", 0) or 0)
-        fle = int(values.get("Флекса", 0) or 0)
-        ext = int(values.get("Экструзия", 0) or 0)
+        pak = safe_int(values.get("Пакетосварка", 0))
+        fle = safe_int(values.get("Флекса", 0))
+        ext = safe_int(values.get("Экструзия", 0))
         values["Итого"] = pak + fle + ext
 
-        # Сохраняем в Excel
         save_entry(datetime.now(), username, values)
 
-        # Обновляем статистику пользователя
         user_stats.setdefault(username, {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0, 'Флекса': 0, 'Экструзия': 0, 'Итого': 0})
         for k in values:
             if k in user_stats[username] and isinstance(values[k], (int, float)):
                 user_stats[username][k] += values[k]
 
-        # Общие итоги по всем пользователям
         total_pakov_all = sum(u['Паков'] for u in user_stats.values())
         total_ves_all = sum(u['Вес'] for u in user_stats.values())
 
-        # Формируем красивый ответ
-        report = (
-            "📦 Отчёт за смену:\n\n"
-            f"🧮 Паков: {values['Паков']} шт\n"
-            f"⚖️ Вес: {values['Вес']} кг\n\n"
-            "♻️ Отходы:\n"
-            f"🔧 Пакетосварка: {pak} кг\n"
-            f"🖨️ Флекса: {fle} кг\n"
-            f"🧵 Экструзия: {ext} кг\n\n"
-            f"🧾 Итого отходов: {values['Итого']} кг\n\n"
-            f"📊 Всего продукции за период: {total_pakov_all} паков / {total_ves_all} кг"
-        )
+        report = f"""
+📦 Отчёт за смену:
 
-        await update.message.reply_text(report)
+🧮 Паков: {values['Паков']} шт
+⚖️ Вес: {values['Вес']} кг
+
+♻️ Отходы:
+🔧 Пакетосварка: {pak} кг
+🖨️ Флекса: {fle} кг
+🧵 Экструзия: {ext} кг
+
+🧾 Итого отходов: {values['Итого']} кг
+
+📊 Всего продукции за период: {total_pakov_all} паков / {total_ves_all} кг
+"""
+
+        await update.message.reply_text(report.strip())
 
 async def cmd_csv(update, context):
     file_path = get_csv_file()
