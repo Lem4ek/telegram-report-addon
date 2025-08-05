@@ -6,8 +6,8 @@ import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Список разрешённых пользователей (по имени или ID)
-ALLOWED_USERS = [123456789, 508532161]  # замени на свои ID
+# Список разрешённых пользователей (по ID или имени)
+ALLOWED_USERS = [1198365511, 508532161]  # замени на свои ID
 
 user_stats = {}
 current_month = datetime.now().month  # для авто-сброса
@@ -25,15 +25,6 @@ def is_allowed(update):
 
 async def handle_message(update, context):
     global current_month, user_stats
-
-    # Сообщаем пользователю его ID, если он ещё не в ALLOWED_USERS
-    user_id = update.effective_user.id
-    if user_id not in ALLOWED_USERS:
-        await update.message.reply_text(
-            f"ℹ️ Ваш Telegram ID: `{user_id}`\n"
-            f"Передайте его администратору для получения доступа.",
-            parse_mode="Markdown"
-        )
 
     # Авто-сброс в начале месяца
     month_now = datetime.now().month
@@ -113,6 +104,18 @@ async def cmd_reset(update, context):
     user_stats.clear()
     await update.message.reply_text("♻️ Статистика за текущий месяц сброшена! (Excel не тронут)")
 
+async def cmd_myid(update, context):
+    # Работает только в личном чате
+    if update.message.chat.type != "private":
+        await update.message.reply_text("ℹ️ Запросите свой ID в личном чате с ботом.")
+        return
+
+    user_id = update.effective_user.id
+    await update.message.reply_text(
+        f"🆔 Ваш Telegram ID: `{user_id}`",
+        parse_mode="Markdown"
+    )
+
 def main():
     if not TOKEN:
         raise ValueError("TELEGRAM_TOKEN env variable is required")
@@ -120,6 +123,7 @@ def main():
     app.add_handler(CommandHandler("csv", cmd_csv))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("myid", cmd_myid))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.run_polling()
 
