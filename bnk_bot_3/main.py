@@ -31,26 +31,34 @@ async def handle_message(update, context):
     text = update.message.text
     values = parse_message(text)
 
-    if values:
-        for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
-            values.setdefault(key, 0)
+    if not values:
+        return
 
-        pak = safe_int(values.get("Пакетосварка", 0))
-        fle = safe_int(values.get("Флекса", 0))
-        ext = safe_int(values.get("Экструзия", 0))
-        values["Итого"] = pak + fle + ext
+    # Проверка: найдено ли 3 и более ключа
+    found_keys_count = sum(1 for v in values.values() if v not in (0, "", None))
+    if found_keys_count < 3:
+        return  # меньше 3 ключей — не отвечаем
 
-        save_entry(datetime.now(), username, values)
+    # Заполняем отсутствующие ключи нулями
+    for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
+        values.setdefault(key, 0)
 
-        user_stats.setdefault(username, {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0, 'Флекса': 0, 'Экструзия': 0, 'Итого': 0})
-        for k in values:
-            if k in user_stats[username] and isinstance(values[k], (int, float)):
-                user_stats[username][k] += values[k]
+    pak = safe_int(values.get("Пакетосварка", 0))
+    fle = safe_int(values.get("Флекса", 0))
+    ext = safe_int(values.get("Экструзия", 0))
+    values["Итого"] = pak + fle + ext
 
-        total_pakov_all = sum(u['Паков'] for u in user_stats.values())
-        total_ves_all = sum(u['Вес'] for u in user_stats.values())
+    save_entry(datetime.now(), username, values)
 
-        report = f"""
+    user_stats.setdefault(username, {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0, 'Флекса': 0, 'Экструзия': 0, 'Итого': 0})
+    for k in values:
+        if k in user_stats[username] and isinstance(values[k], (int, float)):
+            user_stats[username][k] += values[k]
+
+    total_pakov_all = sum(u['Паков'] for u in user_stats.values())
+    total_ves_all = sum(u['Вес'] for u in user_stats.values())
+
+    report = f"""
 📦 Отчёт за смену:
 
 🧮 Паков: {values['Паков']} шт
@@ -65,8 +73,7 @@ async def handle_message(update, context):
 
 📊 Всего продукции за период: {total_pakov_all} паков / {total_ves_all} кг
 """
-
-        await update.message.reply_text(report.strip())
+    await update.message.reply_text(report.strip())
 
 async def cmd_csv(update, context):
     file_path = get_csv_file()
