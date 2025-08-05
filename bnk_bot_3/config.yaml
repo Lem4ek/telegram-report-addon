@@ -15,5 +15,3 @@ options:
   TELEGRAM_TOKEN: ""
 schema:
   TELEGRAM_TOKEN: str
-environment:
-  TELEGRAM_TOKEN: "{options.TELEGRAM_TOKEN}"
