@@ -7,7 +7,7 @@ import os
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # Список разрешённых пользователей (по имени или ID)
-ALLOWED_USERS = [123456789, 987654321]  # замени на свои ID
+ALLOWED_USERS = [123456789, 508532161]  # замени на свои ID
 
 user_stats = {}
 current_month = datetime.now().month  # для авто-сброса
