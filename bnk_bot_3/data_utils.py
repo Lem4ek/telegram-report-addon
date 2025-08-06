@@ -13,7 +13,7 @@ def get_file_path():
 def save_entry(date, user, values, message_id=None):
     """
     Сохраняет данные в Excel.
-    message_id пока не используется, но оставлен для возможных доработок.
+    message_id оставлен на будущее — сейчас не используется.
     """
     file_path = get_file_path()
 
