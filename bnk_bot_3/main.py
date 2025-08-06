@@ -65,9 +65,35 @@ async def handle_message(update, context):
     for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
         values.setdefault(key, 0)
 
-    pak, fle, ext = safe_int(values.get("Пакетосварка", 0)), safe_int(values.get("Флекса", 0)), safe_int(values.get("Экструзия", 0))
+    pak = safe_int(values.get("Пакетосварка", 0))
+    fle = safe_int(values.get("Флекса", 0))
+    ext = safe_int(values.get("Экструзия", 0))
     values["Итого"] = pak + fle + ext
 
+    # Предварительный общий итог
+    total_pakov_all = sum(u['Паков'] for u in user_stats.values()) + values['Паков']
+    total_ves_all = sum(u['Вес'] for u in user_stats.values()) + values['Вес']
+
+    # Формируем красивый отчёт
+    report = f"""
+📦 Отчёт за смену:
+
+🧮 Паков: {values['Паков']} шт
+⚖️ Вес: {values['Вес']} кг
+
+♻️ Отходы:
+🔧 Пакетосварка: {pak} кг
+🖨️ Флекса: {fle} кг
+🧵 Экструзия: {ext} кг
+
+🧾 Итого отходов: {values['Итого']} кг
+
+📊 Всего продукции за период: {total_pakov_all} паков / {total_ves_all} кг
+""".strip()
+
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=report)
+
+    # Кладём данные в буфер
     message_id = update.message.message_id
     pending_updates[message_id] = {
         "user": username,
@@ -77,8 +103,6 @@ async def handle_message(update, context):
         "context": context
     }
 
-    await context.bot.send_message(chat_id=update.effective_chat.id,
-                                   text="⏳ Данные приняты. В течение 2 минут можно отредактировать или удалить сообщение.")
     asyncio.create_task(delayed_save(message_id))
 
 async def handle_edited_message(update, context):
@@ -96,7 +120,9 @@ async def handle_edited_message(update, context):
     for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
         values.setdefault(key, 0)
 
-    pak, fle, ext = safe_int(values.get("Пакетосварка", 0)), safe_int(values.get("Флекса", 0)), safe_int(values.get("Экструзия", 0))
+    pak = safe_int(values.get("Пакетосварка", 0))
+    fle = safe_int(values.get("Флекса", 0))
+    ext = safe_int(values.get("Экструзия", 0))
     values["Итого"] = pak + fle + ext
 
     pending_updates[message_id]["values"] = values
