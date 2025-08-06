@@ -5,13 +5,15 @@ from data_utils import save_entry, generate_stats, get_csv_file
 from datetime import datetime, timedelta
 from openpyxl import load_workbook
 import os
+import matplotlib.pyplot as plt
+import pandas as pd
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 ALLOWED_USERS = [1198365511, 508532161]  # замени на свои ID
 user_stats = {}
 current_month = datetime.now().month
-pending_updates = {}  # {message_id: {...}}
+pending_updates = {}
 
 SAVE_DELAY = timedelta(minutes=2)  # тестовая задержка 2 минуты
 
@@ -33,12 +35,12 @@ def load_stats_from_excel():
     """Загружает статистику из текущего Excel в user_stats при старте"""
     file_path = get_csv_file()
     if not os.path.exists(file_path):
-        return  # файла ещё нет — статистики нет
+        return
 
     wb = load_workbook(file_path)
     ws = wb.active
 
-    for row in ws.iter_rows(min_row=2, values_only=True):  # пропускаем заголовок
+    for row in ws.iter_rows(min_row=2, values_only=True):
         date, user, pakov, ves, paket, flexa, extru, itogo = row
         if not user:
             continue
@@ -54,7 +56,6 @@ def load_stats_from_excel():
 
 
 async def delayed_save(message_id):
-    """Ждёт SAVE_DELAY и сохраняет данные, если они ещё в буфере"""
     await asyncio.sleep(SAVE_DELAY.total_seconds())
     if message_id in pending_updates:
         data = pending_updates.pop(message_id)
@@ -62,18 +63,15 @@ async def delayed_save(message_id):
         username = data["user"]
         values = data["values"]
 
-        # Обновляем статистику
         user_stats.setdefault(username, {'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
                                          'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0})
         for k in values:
             if k in user_stats[username] and isinstance(values[k], (int, float)):
                 user_stats[username][k] += values[k]
 
-        # Итоги по всем пользователям
         total_pakov_all = sum(u['Паков'] for u in user_stats.values())
         total_ves_all = sum(u['Вес'] for u in user_stats.values())
 
-        # Формируем отчёт с двумя знаками после запятой
         report = f"""
 📦 Отчёт за смену:
 
@@ -81,7 +79,7 @@ async def delayed_save(message_id):
 ⚖️ Вес: {values['Вес']:.2f} кг
 
 ♻️ Отходы:
-🛍️ Пакетосварка: {values['Пакетосварка']:.2f} кг
+🛍️ Пакетосварка: {values['Пакетосварка']:.2f} 
 🎨 Флекса: {values['Флекса']:.2f} кг
 🧵 Экструзия: {values['Экструзия']:.2f} кг
 
@@ -118,7 +116,6 @@ async def handle_message(update, context):
 
     values["Итого"] = safe_float(values.get("Пакетосварка", 0)) + safe_float(values.get("Флекса", 0)) + safe_float(values.get("Экструзия", 0))
 
-    # Кладём данные в буфер без ответа в чат
     message_id = update.message.message_id
     pending_updates[message_id] = {
         "user": username,
@@ -185,11 +182,73 @@ async def cmd_myid(update, context):
                                    parse_mode="Markdown")
 
 
+async def cmd_graf(update, context):
+    if not is_allowed(update):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
+        return
+
+    file_path = get_csv_file()
+    if not os.path.exists(file_path):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Файл данных не найден.")
+        return
+
+    df = pd.read_excel(file_path)
+    if df.empty:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ В файле нет данных.")
+        return
+
+    df.columns = ["Дата", "Имя", "Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия", "Итого"]
+    df["Дата"] = pd.to_datetime(df["Дата"], errors="coerce")
+
+    # 📈 График 1 — Продукция и отходы по дням
+    daily = df.groupby(df["Дата"].dt.date).agg({"Вес": "sum", "Итого": "sum"}).reset_index()
+    plt.figure()
+    plt.plot(daily["Дата"], daily["Вес"], marker="o", label="Вес (кг)")
+    plt.plot(daily["Дата"], daily["Итого"], marker="o", label="Отходы (кг)", color="red")
+    plt.title("Производство и отходы по дням")
+    plt.xlabel("Дата")
+    plt.ylabel("Кг")
+    plt.xticks(rotation=45)
+    plt.legend()
+    plt.tight_layout()
+    img1 = "/tmp/graf1.png"
+    plt.savefig(img1)
+    plt.close()
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img1, "rb"))
+
+    # 📊 График 2 — ТОП производители
+    top_users = df.groupby("Имя")["Вес"].sum().sort_values(ascending=False)
+    plt.figure()
+    top_users.plot(kind="bar")
+    plt.title("ТОП производители по весу")
+    plt.ylabel("Кг")
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    img2 = "/tmp/graf2.png"
+    plt.savefig(img2)
+    plt.close()
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img2, "rb"))
+
+    # 🥧 График 3 — Доля отходов
+    total_weight = df["Вес"].sum()
+    total_waste = df["Итого"].sum()
+    labels = ["Продукция", "Отходы"]
+    sizes = [total_weight - total_waste, total_waste]
+    colors = ["#4CAF50", "#F44336"]
+    plt.figure()
+    plt.pie(sizes, labels=labels, autopct="%1.1f%%", colors=colors, startangle=90)
+    plt.axis("equal")
+    plt.title("Доля отходов в общей массе")
+    img3 = "/tmp/graf3.png"
+    plt.savefig(img3)
+    plt.close()
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img3, "rb"))
+
+
 def main():
     if not TOKEN:
         raise ValueError("TELEGRAM_TOKEN env variable is required")
 
-    # Загружаем статистику из файла при старте
     load_stats_from_excel()
 
     app = ApplicationBuilder().token(TOKEN).build()
@@ -198,6 +257,7 @@ def main():
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("myid", cmd_myid))
+    app.add_handler(CommandHandler("graf", cmd_graf))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
 
