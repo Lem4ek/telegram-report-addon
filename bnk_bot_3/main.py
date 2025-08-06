@@ -1,13 +1,13 @@
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler
 from parser import parse_message
-from data_utils import save_entry, delete_entry_by_message_id, generate_stats, get_csv_file
+from data_utils import save_entry, generate_stats, get_csv_file
 from datetime import datetime
 import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 # Список разрешённых пользователей (по ID или имени)
-ALLOWED_USERS = [123456789, 987654321]  # замени на свои ID
+ALLOWED_USERS = [1198365511, 508532161]  # замени на свои ID
 
 user_stats = {}
 current_month = datetime.now().month  # для авто-сброса
@@ -56,7 +56,7 @@ async def handle_message(update, context):
     ext = safe_int(values.get("Экструзия", 0))
     values["Итого"] = pak + fle + ext
 
-    save_entry(datetime.now(), username, values, update.message.message_id)
+    save_entry(datetime.now(), username, values)
 
     user_stats.setdefault(username, {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0, 'Флекса': 0, 'Экструзия': 0, 'Итого': 0})
     for k in values:
@@ -83,13 +83,6 @@ async def handle_message(update, context):
 """
     await update.message.reply_text(report.strip())
 
-async def handle_deleted_message(update, context):
-    # Обрабатываем удалённые сообщения
-    if not update.message:
-        return
-    deleted_id = update.message.message_id
-    delete_entry_by_message_id(deleted_id)
-
 async def cmd_csv(update, context):
     if not is_allowed(update):
         await update.message.reply_text("⛔ У вас нет доступа к этой команде.")
@@ -112,11 +105,16 @@ async def cmd_reset(update, context):
     await update.message.reply_text("♻️ Статистика за текущий месяц сброшена! (Excel не тронут)")
 
 async def cmd_myid(update, context):
+    # Работает только в личном чате
     if update.message.chat.type != "private":
         await update.message.reply_text("ℹ️ Запросите свой ID в личном чате с ботом.")
         return
+
     user_id = update.effective_user.id
-    await update.message.reply_text(f"🆔 Ваш Telegram ID: `{user_id}`", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"🆔 Ваш Telegram ID: `{user_id}`",
+        parse_mode="Markdown"
+    )
 
 def main():
     if not TOKEN:
@@ -127,7 +125,6 @@ def main():
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("myid", cmd_myid))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.DELETED, handle_deleted_message))
     app.run_polling()
 
 if __name__ == "__main__":
