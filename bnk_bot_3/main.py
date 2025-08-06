@@ -1,4 +1,4 @@
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, JobQueue
 from parser import parse_message
 from data_utils import save_entry, generate_stats, get_csv_file
 from datetime import datetime, timedelta
@@ -6,14 +6,14 @@ import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Список разрешённых пользователей (по ID или имени)
+# Список разрешённых пользователей
 ALLOWED_USERS = [1198365511, 508532161]  # замени на свои ID
 
 user_stats = {}
 current_month = datetime.now().month
 pending_updates = {}  # {message_id: {"user": str, "values": dict, "time": datetime, "chat_id": int}}
 
-SAVE_DELAY = timedelta(minutes=2)  # 2 минуты для теста
+SAVE_DELAY = timedelta(minutes=2)  # для теста
 
 def safe_int(value):
     try:
@@ -147,7 +147,12 @@ def main():
         raise ValueError("TELEGRAM_TOKEN env variable is required")
 
     app = ApplicationBuilder().token(TOKEN).build()
-    app.job_queue.run_repeating(process_save_jobs, interval=60, first=60)
+
+    # Создаём и запускаем JobQueue вручную
+    jq = JobQueue()
+    jq.set_application(app)
+    jq.run_repeating(process_save_jobs, interval=60, first=60)
+    jq.start()
 
     app.add_handler(CommandHandler("csv", cmd_csv))
     app.add_handler(CommandHandler("stats", cmd_stats))
