@@ -27,7 +27,7 @@ def is_allowed(update):
     return username in ALLOWED_USERS or user_id in ALLOWED_USERS
 
 def process_save_jobs():
-    """Проверяем, что пора сохранить данные из буфера"""
+    """Проверяем буфер и сохраняем данные, которые ждут более 20 минут"""
     now = datetime.now()
     to_save = [mid for mid, data in pending_updates.items() if now - data["time"] >= SAVE_DELAY]
     for mid in to_save:
@@ -49,6 +49,7 @@ async def handle_message(update, context):
     month_now = datetime.now().month
     if month_now != current_month:
         user_stats.clear()
+        pending_updates.clear()
         current_month = month_now
 
     if not update.message or not update.message.text:
@@ -64,8 +65,9 @@ async def handle_message(update, context):
     # Проверка: найдено ли 3 и более ключа
     found_keys_count = sum(1 for v in values.values() if v not in (0, "", None))
     if found_keys_count < 3:
-        return
+        return  # меньше 3 ключей — не отвечаем
 
+    # Заполняем отсутствующие ключи нулями
     for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
         values.setdefault(key, 0)
 
@@ -74,7 +76,7 @@ async def handle_message(update, context):
     ext = safe_int(values.get("Экструзия", 0))
     values["Итого"] = pak + fle + ext
 
-    # Сохраняем в буфер
+    # Кладём в буфер
     pending_updates[update.message.message_id] = {
         "user": username,
         "values": values,
@@ -82,12 +84,11 @@ async def handle_message(update, context):
     }
 
     await update.message.reply_text(
-        "⏳ Данные приняты. В течение 20 минут можно отредактировать сообщение, "
-        "и они будут обновлены."
+        "⏳ Данные приняты. В течение 20 минут можно отредактировать сообщение, и они будут обновлены."
     )
 
 async def handle_edited_message(update, context):
-    """Обновляем данные в буфере при редактировании"""
+    """Обновление данных при редактировании сообщения"""
     if not update.edited_message or not update.edited_message.text:
         return
 
@@ -141,7 +142,10 @@ async def cmd_myid(update, context):
         await update.message.reply_text("ℹ️ Запросите свой ID в личном чате с ботом.")
         return
     user_id = update.effective_user.id
-    await update.message.reply_text(f"🆔 Ваш Telegram ID: `{user_id}`", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"🆔 Ваш Telegram ID: `{user_id}`",
+        parse_mode="Markdown"
+    )
 
 def main():
     if not TOKEN:
