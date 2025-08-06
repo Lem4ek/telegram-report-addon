@@ -3,6 +3,7 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHan
 from parser import parse_message
 from data_utils import save_entry, generate_stats, get_csv_file
 from datetime import datetime, timedelta
+from openpyxl import load_workbook
 import os
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -14,16 +15,43 @@ pending_updates = {}  # {message_id: {...}}
 
 SAVE_DELAY = timedelta(minutes=2)  # тестовая задержка 2 минуты
 
+
 def safe_int(value):
     try:
         return int(value)
     except (ValueError, TypeError):
         return 0
 
+
 def is_allowed(update):
     user_id = update.effective_user.id
     username = update.effective_user.first_name
     return username in ALLOWED_USERS or user_id in ALLOWED_USERS
+
+
+def load_stats_from_excel():
+    """Загружает статистику из текущего Excel в user_stats при старте"""
+    file_path = get_csv_file()
+    if not os.path.exists(file_path):
+        return  # файла ещё нет — статистики нет
+
+    wb = load_workbook(file_path)
+    ws = wb.active
+
+    for row in ws.iter_rows(min_row=2, values_only=True):  # пропускаем заголовок
+        date, user, pakov, ves, paket, flexa, extru, itogo = row
+        if not user:
+            continue
+        if user not in user_stats:
+            user_stats[user] = {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0,
+                                'Флекса': 0, 'Экструзия': 0, 'Итого': 0}
+        user_stats[user]['Паков'] += pakov or 0
+        user_stats[user]['Вес'] += ves or 0
+        user_stats[user]['Пакетосварка'] += paket or 0
+        user_stats[user]['Флекса'] += flexa or 0
+        user_stats[user]['Экструзия'] += extru or 0
+        user_stats[user]['Итого'] += itogo or 0
+
 
 async def delayed_save(message_id):
     """Ждёт SAVE_DELAY и сохраняет данные, если они ещё в буфере"""
@@ -68,6 +96,7 @@ async def delayed_save(message_id):
 
         await data["context"].bot.send_message(chat_id=data["chat_id"], text=report)
 
+
 async def handle_message(update, context):
     global current_month
     month_now = datetime.now().month
@@ -108,6 +137,7 @@ async def handle_message(update, context):
 
     asyncio.create_task(delayed_save(message_id))
 
+
 async def handle_edited_message(update, context):
     if not update.edited_message or not update.edited_message.text:
         return
@@ -131,6 +161,7 @@ async def handle_edited_message(update, context):
     pending_updates[message_id]["values"] = values
     pending_updates[message_id]["time"] = datetime.now()
 
+
 async def cmd_csv(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
@@ -138,11 +169,13 @@ async def cmd_csv(update, context):
     file_path = get_csv_file()
     await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, 'rb'))
 
+
 async def cmd_stats(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text=generate_stats(user_stats))
+
 
 async def cmd_reset(update, context):
     if not is_allowed(update):
@@ -152,6 +185,7 @@ async def cmd_reset(update, context):
     pending_updates.clear()
     await context.bot.send_message(chat_id=update.effective_chat.id, text="♻️ Статистика и буфер сброшены! (Excel не тронут)")
 
+
 async def cmd_myid(update, context):
     if update.message.chat.type != "private":
         await context.bot.send_message(chat_id=update.effective_chat.id, text="ℹ️ Запросите ID в личке.")
@@ -160,9 +194,14 @@ async def cmd_myid(update, context):
                                    text=f"🆔 Ваш Telegram ID: `{update.effective_user.id}`",
                                    parse_mode="Markdown")
 
+
 def main():
     if not TOKEN:
         raise ValueError("TELEGRAM_TOKEN env variable is required")
+
+    # Загружаем статистику из файла при старте
+    load_stats_from_excel()
+
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("csv", cmd_csv))
@@ -173,6 +212,7 @@ def main():
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
