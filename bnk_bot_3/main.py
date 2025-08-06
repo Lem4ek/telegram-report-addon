@@ -26,7 +26,7 @@ def is_allowed(update):
     return username in ALLOWED_USERS or user_id in ALLOWED_USERS
 
 async def delayed_save(message_id):
-    """Ожидает SAVE_DELAY и сохраняет данные, если они ещё в буфере"""
+    """Ждёт SAVE_DELAY и сохраняет данные, если они ещё в буфере"""
     await asyncio.sleep(SAVE_DELAY.total_seconds())
     if message_id in pending_updates:
         data = pending_updates.pop(message_id)
@@ -34,13 +34,39 @@ async def delayed_save(message_id):
         username = data["user"]
         values = data["values"]
 
+        # Обновляем статистику
         user_stats.setdefault(username, {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0,
                                          'Флекса': 0, 'Экструзия': 0, 'Итого': 0})
         for k in values:
             if k in user_stats[username] and isinstance(values[k], (int, float)):
                 user_stats[username][k] += values[k]
 
-        await data["context"].bot.send_message(chat_id=data["chat_id"], text="✅ Данные сохранены")
+        # Итоги по всем пользователям
+        total_pakov_all = sum(u['Паков'] for u in user_stats.values())
+        total_ves_all = sum(u['Вес'] for u in user_stats.values())
+
+        # Формируем отчёт
+        pak = safe_int(values.get("Пакетосварка", 0))
+        fle = safe_int(values.get("Флекса", 0))
+        ext = safe_int(values.get("Экструзия", 0))
+
+        report = f"""
+📦 Отчёт за смену:
+
+🧮 Паков: {values['Паков']} шт
+⚖️ Вес: {values['Вес']} кг
+
+♻️ Отходы:
+🔧 Пакетосварка: {pak} кг
+🖨️ Флекса: {fle} кг
+🧵 Экструзия: {ext} кг
+
+🧾 Итого отходов: {values['Итого']} кг
+
+📊 Всего продукции за период: {total_pakov_all} паков / {total_ves_all} кг
+""".strip()
+
+        await data["context"].bot.send_message(chat_id=data["chat_id"], text=report)
 
 async def handle_message(update, context):
     global current_month
@@ -70,30 +96,7 @@ async def handle_message(update, context):
     ext = safe_int(values.get("Экструзия", 0))
     values["Итого"] = pak + fle + ext
 
-    # Предварительный общий итог
-    total_pakov_all = sum(u['Паков'] for u in user_stats.values()) + values['Паков']
-    total_ves_all = sum(u['Вес'] for u in user_stats.values()) + values['Вес']
-
-    # Формируем красивый отчёт
-    report = f"""
-📦 Отчёт за смену:
-
-🧮 Паков: {values['Паков']} шт
-⚖️ Вес: {values['Вес']} кг
-
-♻️ Отходы:
-🔧 Пакетосварка: {pak} кг
-🖨️ Флекса: {fle} кг
-🧵 Экструзия: {ext} кг
-
-🧾 Итого отходов: {values['Итого']} кг
-
-📊 Всего продукции за период: {total_pakov_all} паков / {total_ves_all} кг
-""".strip()
-
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=report)
-
-    # Кладём данные в буфер
+    # Кладём данные в буфер без ответа в чат
     message_id = update.message.message_id
     pending_updates[message_id] = {
         "user": username,
@@ -127,8 +130,6 @@ async def handle_edited_message(update, context):
 
     pending_updates[message_id]["values"] = values
     pending_updates[message_id]["time"] = datetime.now()
-
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="✏️ Данные обновлены.")
 
 async def cmd_csv(update, context):
     if not is_allowed(update):
