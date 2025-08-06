@@ -16,11 +16,11 @@ pending_updates = {}  # {message_id: {...}}
 SAVE_DELAY = timedelta(minutes=2)  # тестовая задержка 2 минуты
 
 
-def safe_int(value):
+def safe_float(value):
     try:
-        return int(value)
+        return float(value)
     except (ValueError, TypeError):
-        return 0
+        return 0.0
 
 
 def is_allowed(update):
@@ -43,8 +43,8 @@ def load_stats_from_excel():
         if not user:
             continue
         if user not in user_stats:
-            user_stats[user] = {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0,
-                                'Флекса': 0, 'Экструзия': 0, 'Итого': 0}
+            user_stats[user] = {'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
+                                'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0}
         user_stats[user]['Паков'] += pakov or 0
         user_stats[user]['Вес'] += ves or 0
         user_stats[user]['Пакетосварка'] += paket or 0
@@ -63,8 +63,8 @@ async def delayed_save(message_id):
         values = data["values"]
 
         # Обновляем статистику
-        user_stats.setdefault(username, {'Паков': 0, 'Вес': 0, 'Пакетосварка': 0,
-                                         'Флекса': 0, 'Экструзия': 0, 'Итого': 0})
+        user_stats.setdefault(username, {'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
+                                         'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0})
         for k in values:
             if k in user_stats[username] and isinstance(values[k], (int, float)):
                 user_stats[username][k] += values[k]
@@ -73,25 +73,21 @@ async def delayed_save(message_id):
         total_pakov_all = sum(u['Паков'] for u in user_stats.values())
         total_ves_all = sum(u['Вес'] for u in user_stats.values())
 
-        # Формируем отчёт
-        pak = safe_int(values.get("Пакетосварка", 0))
-        fle = safe_int(values.get("Флекса", 0))
-        ext = safe_int(values.get("Экструзия", 0))
-
+        # Формируем отчёт с двумя знаками после запятой
         report = f"""
 📦 Отчёт за смену:
 
-🧮 Паков: {values['Паков']} шт
-⚖️ Вес: {values['Вес']} кг
+🧮 Паков: {values['Паков']:.2f} шт
+⚖️ Вес: {values['Вес']:.2f} кг
 
 ♻️ Отходы:
-🔧 Пакетосварка: {pak} кг
-🖨️ Флекса: {fle} кг
-🧵 Экструзия: {ext} кг
+🔧 Пакетосварка: {values['Пакетосварка']:.2f} кг
+🖨️ Флекса: {values['Флекса']:.2f} кг
+🧵 Экструзия: {values['Экструзия']:.2f} кг
 
-🧾 Итого отходов: {values['Итого']} кг
+🧾 Итого отходов: {values['Итого']:.2f} кг
 
-📊 Всего продукции за период: {total_pakov_all} паков / {total_ves_all} кг
+📊 Всего продукции за период: {total_pakov_all:.2f} паков / {total_ves_all:.2f} кг
 """.strip()
 
         await data["context"].bot.send_message(chat_id=data["chat_id"], text=report)
@@ -118,12 +114,9 @@ async def handle_message(update, context):
         return
 
     for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
-        values.setdefault(key, 0)
+        values.setdefault(key, 0.0)
 
-    pak = safe_int(values.get("Пакетосварка", 0))
-    fle = safe_int(values.get("Флекса", 0))
-    ext = safe_int(values.get("Экструзия", 0))
-    values["Итого"] = pak + fle + ext
+    values["Итого"] = safe_float(values.get("Пакетосварка", 0)) + safe_float(values.get("Флекса", 0)) + safe_float(values.get("Экструзия", 0))
 
     # Кладём данные в буфер без ответа в чат
     message_id = update.message.message_id
@@ -151,12 +144,9 @@ async def handle_edited_message(update, context):
         return
 
     for key in ["Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия"]:
-        values.setdefault(key, 0)
+        values.setdefault(key, 0.0)
 
-    pak = safe_int(values.get("Пакетосварка", 0))
-    fle = safe_int(values.get("Флекса", 0))
-    ext = safe_int(values.get("Экструзия", 0))
-    values["Итого"] = pak + fle + ext
+    values["Итого"] = safe_float(values.get("Пакетосварка", 0)) + safe_float(values.get("Флекса", 0)) + safe_float(values.get("Экструзия", 0))
 
     pending_updates[message_id]["values"] = values
     pending_updates[message_id]["time"] = datetime.now()
