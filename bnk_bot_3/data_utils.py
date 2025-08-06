@@ -12,17 +12,20 @@ def get_file_path():
 def save_entry(date, user, values, message_id=None):
     """
     Сохраняет данные в Excel.
-    message_id оставлен на будущее — сейчас не используется.
+    message_id пока не используется, но оставлен для будущих доработок.
     """
     file_path = get_file_path()
+
     if os.path.exists(file_path):
         wb = load_workbook(file_path)
         ws = wb.active
     else:
         wb = Workbook()
         ws = wb.active
-        ws.append(["Дата", "Имя", "Паков", "Вес",
-                   "Пакетосварка", "Флекса", "Экструзия", "Итого"])
+        ws.append([
+            "Дата", "Имя", "Паков", "Вес",
+            "Пакетосварка", "Флекса", "Экструзия", "Итого"
+        ])
 
     ws.append([
         date.strftime('%Y-%m-%d %H:%M'),
