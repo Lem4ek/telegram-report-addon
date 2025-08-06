@@ -8,8 +8,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 def get_file_path():
     return os.path.join(DATA_DIR, f"{datetime.now().strftime('%Y-%m')}.xlsx")
 
-def save_entry(date, user, values, message_id=None):
-    """Сохраняет данные в Excel. message_id пока не используется, но оставлен на будущее."""
+def save_entry(date, user, values):
     file_path = get_file_path()
     if os.path.exists(file_path):
         wb = load_workbook(file_path)
