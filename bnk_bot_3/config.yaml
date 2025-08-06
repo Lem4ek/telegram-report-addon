@@ -11,6 +11,8 @@ init: false
 build: .
 arch:
   - aarch64
+map:
+  - config:rw  
 options:
   TELEGRAM_TOKEN: ""
 schema:
