@@ -1,56 +1,46 @@
 import re
 
-def normalize_number(value):
-    try:
-        return float(value.replace(",", "."))
-    except:
-        return 0
-
-def parse_extrusion(text):
-    m = re.search(r"[мm]\s*-?\s*(\d+[.,]?\d*)", text, re.IGNORECASE)
-    t = re.search(r"[тt]-?\s*(\d+[.,]?\d*)", text, re.IGNORECASE)
-    return {
-        "Экструзия_м": normalize_number(m.group(1)) if m else 0,
-        "Экструзия_т": normalize_number(t.group(1)) if t else 0
-    }
-
 def parse_message(text):
-    text = text.lower()
+    text = text.lower().strip()
 
-    # Ключевые слова и их синонимы
-    synonyms = {
-        "паков": ["паков", "паки", "упаковок"],
-        "вес": ["вес", "кг", "килограмм"],
-        "пакетосварка": ["пакетосварка", "пакет", "сварка"],
-        "флекса": ["флекса", "флексография", "флексо"],
-        "экструзия": ["экструзия", "экструдер"]
+    results = {
+        "Паков": 0,
+        "Вес": 0,
+        "Пакетосварка": 0,
+        "Флекса": 0,
+        "Экструзия": 0,
     }
 
-    results = {}
+    # Шаблоны
+    patterns = {
+        "Паков": r"(паков|паки|упаковка)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)",
+        "Вес": r"вес\s*[:\-]?\s*(\d+(?:[.,]\d+)?)",
+        "Пакетосварка": r"пакетосварка\s*[:\-]?\s*(\d+(?:[.,]\d+)?)",
+        "Флекса": r"флекс[а-я]*\s*[:\-]?\s*(\d+(?:[.,]\d+)?)",
+        "Экструзия": r"(экструзия|экструдер)[^\d]*(м)?\s*([\d.,]+)?\s*(т)?[^\d]*([\d.,]+)?"
+    }
 
-    # Паков
-    match = re.search(r"(паков|паки|упаковок)[^\d]*(\d+)", text)
+    # Обработка экструзии
+    match = re.search(patterns["Экструзия"], text)
     if match:
-        results["Паков"] = int(match.group(2))
+        m_val = match.group(3)
+        t_val = match.group(5)
+        m = float(m_val.replace(",", ".")) if m_val else 0
+        t = float(t_val.replace(",", ".")) if t_val else 0
+        results["Экструзия"] = round(m + t, 2)
 
-    # Вес
-    match = re.search(r"(вес|кг|килограмм)[^\d]*(\d+[.,]?\d*)", text)
-    if match:
-        results["Вес"] = normalize_number(match.group(2))
+    # Остальные ключи
+    for key in ["Паков", "Вес", "Пакетосварка", "Флекса"]:
+        match = re.search(patterns[key], text)
+        if match:
+            value = match.group(2) if len(match.groups()) > 1 else match.group(1)
+            try:
+                results[key] = round(float(value.replace(",", ".")), 2)
+            except ValueError:
+                pass
 
-    # Пакетосварка
-    match = re.search(r"(пакетосварка|пакет|сварка)[^\d]*(\d+[.,]?\d*)", text)
-    if match:
-        results["Пакетосварка"] = normalize_number(match.group(2))
-
-    # Флекса
-    match = re.search(r"(флекса|флексография|флексо)[^\d]*(\d+[.,]?\d*)", text)
-    if match:
-        results["Флекса"] = normalize_number(match.group(2))
-
-    # Экструзия (м и т отдельно)
-    if any(word in text for word in synonyms["экструзия"]):
-        ext = parse_extrusion(text)
-        results["Экструзия"] = round(ext["Экструзия_м"] + ext["Экструзия_т"], 2)
+    # Если нет слова "вес" или "всего", считаем, что это не отчет
+    if not re.search(r"\b(вес|всего)\b", text):
+        return {}
 
     return results
