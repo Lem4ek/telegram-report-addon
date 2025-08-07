@@ -1,44 +1,56 @@
 import re
 
+def normalize_number(value):
+    try:
+        return float(value.replace(",", "."))
+    except:
+        return 0
+
+def parse_extrusion(text):
+    m = re.search(r"[мm]\s*-?\s*(\d+[.,]?\d*)", text, re.IGNORECASE)
+    t = re.search(r"[тt]-?\s*(\d+[.,]?\d*)", text, re.IGNORECASE)
+    return {
+        "Экструзия_м": normalize_number(m.group(1)) if m else 0,
+        "Экструзия_т": normalize_number(t.group(1)) if t else 0
+    }
+
 def parse_message(text):
-    result = {}
+    text = text.lower()
 
-    # Приводим текст к нижнему регистру и убираем лишние пробелы
-    text = re.sub(r'\s+', ' ', text.strip().lower())
+    # Ключевые слова и их синонимы
+    synonyms = {
+        "паков": ["паков", "паки", "упаковок"],
+        "вес": ["вес", "кг", "килограмм"],
+        "пакетосварка": ["пакетосварка", "пакет", "сварка"],
+        "флекса": ["флекса", "флексография", "флексо"],
+        "экструзия": ["экструзия", "экструдер"]
+    }
 
-    # Паков (оставляем как целое)
-    match = re.search(r'паков\s*[-–:]?\s*(\d+(?:[.,]\d+)?)', text)
+    results = {}
+
+    # Паков
+    match = re.search(r"(паков|паки|упаковок)[^\d]*(\d+)", text)
     if match:
-        result["Паков"] = float(match.group(1).replace(',', '.'))
+        results["Паков"] = int(match.group(2))
 
     # Вес
-    match = re.search(r'вес\s*[-–:]?\s*(\d+(?:[.,]\d+)?)', text)
+    match = re.search(r"(вес|кг|килограмм)[^\d]*(\d+[.,]?\d*)", text)
     if match:
-        result["Вес"] = float(match.group(1).replace(',', '.'))
+        results["Вес"] = normalize_number(match.group(2))
 
     # Пакетосварка
-    match = re.search(r'пакетосварка\s*[-–:]?\s*(\d+(?:[.,]\d+)?)', text)
+    match = re.search(r"(пакетосварка|пакет|сварка)[^\d]*(\d+[.,]?\d*)", text)
     if match:
-        result["Пакетосварка"] = float(match.group(1).replace(',', '.'))
+        results["Пакетосварка"] = normalize_number(match.group(2))
 
-    # Флекса или Флексография
-    match = re.search(r'флекс(?:ография)?\s*[-–:]?\s*(\d+(?:[.,]\d+)?)', text)
+    # Флекса
+    match = re.search(r"(флекса|флексография|флексо)[^\d]*(\d+[.,]?\d*)", text)
     if match:
-        result["Флекса"] = float(match.group(1).replace(',', '.'))
+        results["Флекса"] = normalize_number(match.group(2))
 
-    # Экструзия с мягкими (м) и твёрдыми (т) отходами
-    match = re.search(
-        r'экструзия\s*(?:м\s*(\d+(?:[.,]\d+)?))?\s*(?:т\s*(\d+(?:[.,]\d+)?))?',
-        text
-    )
-    if match:
-        m_value = float(match.group(1).replace(',', '.')) if match.group(1) else 0
-        t_value = float(match.group(2).replace(',', '.')) if match.group(2) else 0
-        result["Экструзия"] = m_value + t_value
+    # Экструзия (м и т отдельно)
+    if any(word in text for word in synonyms["экструзия"]):
+        ext = parse_extrusion(text)
+        results["Экструзия"] = round(ext["Экструзия_м"] + ext["Экструзия_т"], 2)
 
-    # Итого
-    match = re.search(r'итого\s*[-–:]?\s*(\d+(?:[.,]\d+)?)', text)
-    if match:
-        result["Итого"] = float(match.group(1).replace(',', '.'))
-
-    return result
+    return results
