@@ -1,74 +1,42 @@
 import os
-from datetime import datetime
-from openpyxl import load_workbook
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler
 from parser import parse_message
-from data_utils import save_entry, generate_stats, get_csv_file, get_file_path
+from data_utils import save_entry, generate_stats, get_csv_file
+from datetime import datetime
+from collections import defaultdict
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-ALLOWED_USERS = [1198365511, 508532161]  # замени на нужные ID
+# Разрешённые пользователи (Telegram ID)
+ALLOWED_USERS = [1198365511, 508532161]
 
+# Статистика пользователей
 user_stats = {}
-user_days = {}
+user_days = defaultdict(set)
 current_month = datetime.now().month
 
-def safe_float(value):
+# Проверка, разрешён ли пользователь
+def is_allowed(update):
+    user_id = update.effective_user.id
+    return user_id in ALLOWED_USERS
+
+# Безопасное приведение к числу
+def safe_number(value):
     try:
         return float(value)
     except:
-        return 0.0
+        return 0
 
-def is_allowed(update):
-    return update.effective_user.id in ALLOWED_USERS
-
-def load_stats_from_excel():
-    path = get_file_path()
-    if not os.path.exists(path):
-        return
-
-    wb = load_workbook(path)
-    ws = wb.active
-
-    for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
-        try:
-            date_str, username, pakov, ves, paket, flexa, ext, total = row
-
-            if isinstance(date_str, str):
-                date = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
-            else:
-                date = date_str
-
-            user_stats.setdefault(username, {
-                'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
-                'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0
-            })
-
-            user_stats[username]['Паков']        += safe_float(pakov)
-            user_stats[username]['Вес']          += safe_float(ves)
-            user_stats[username]['Пакетосварка'] += safe_float(paket)
-            user_stats[username]['Флекса']       += safe_float(flexa)
-            user_stats[username]['Экструзия']    += safe_float(ext)
-            user_stats[username]['Итого']        += safe_float(total)
-
-            user_days.setdefault(username, set()).add(date.date())
-        except Exception as e:
-            print(f"[ERR] Строка {i}: {e}")
-
+# Основной обработчик сообщений
 async def handle_message(update, context):
     global current_month
 
     if not update.message or not update.message.text:
         return
 
-    text = update.message.text
-    values = parse_message(text)
-    if not values:
-        return
-
-    found_keys = sum(1 for v in values.values() if v not in (0, "", None))
-    if found_keys < 3:
-        return
+    text = update.message.text.lower()
+    if "вес" not in text and "итого" not in text:
+        return  # фильтруем сообщения с количеством людей, а не отчёты
 
     now = datetime.now()
     if now.month != current_month:
@@ -77,88 +45,118 @@ async def handle_message(update, context):
         current_month = now.month
 
     username = update.effective_user.first_name
-    values.setdefault("Паков", 0)
-    values.setdefault("Вес", 0)
-    values.setdefault("Пакетосварка", 0)
-    values.setdefault("Флекса", 0)
-    values.setdefault("Экструзия", 0)
+    parsed = parse_message(update.message.text)
 
-    values["Итого"] = (
-        safe_float(values.get("Пакетосварка", 0)) +
-        safe_float(values.get("Флекса", 0)) +
-        safe_float(values.get("Экструзия", 0))
-    )
+    if not parsed:
+        return
 
-    save_entry(now, username, values)
+    # Приведение значений
+    pakov = safe_number(parsed.get("Паков", 0))
+    ves = safe_number(parsed.get("Вес", 0))
+    pak = safe_number(parsed.get("Пакетосварка", 0))
+    fle = safe_number(parsed.get("Флекса", 0))
+    ext = safe_number(parsed.get("Экструзия", 0))
+    total = pak + fle + ext
 
-    user_stats.setdefault(username, {
-        'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
-        'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0
-    })
+    parsed["Паков"] = pakov
+    parsed["Вес"] = ves
+    parsed["Пакетосварка"] = pak
+    parsed["Флекса"] = fle
+    parsed["Экструзия"] = ext
+    parsed["Итого"] = total
 
-    user_days.setdefault(username, set()).add(now.date())
+    # Сохраняем в Excel
+    save_entry(now, username, parsed)
 
-    for k in values:
-        if k in user_stats[username]:
-            user_stats[username][k] += safe_float(values[k])
+    # Обновляем статистику
+    if username not in user_stats:
+        user_stats[username] = {
+            "Паков": 0, "Вес": 0, "Пакетосварка": 0,
+            "Флекса": 0, "Экструзия": 0, "Итого": 0
+        }
 
-    total_pakov = sum(user['Паков'] for user in user_stats.values())
-    total_ves = sum(user['Вес'] for user in user_stats.values())
+    for key in parsed:
+        if key in user_stats[username]:
+            user_stats[username][key] += parsed[key]
+
+    user_days[username].add(now.date())
+
+    total_pakov_all = sum(u['Паков'] for u in user_stats.values())
+    total_ves_all = sum(u['Вес'] for u in user_stats.values())
 
     report = f"""
 📦 Отчёт за смену:
 
-🧮 Паков: {values['Паков']} шт
-⚖️ Вес: {values['Вес']} кг
+🧮 Паков: {int(pakov)} шт
+⚖️ Вес: {int(ves)} кг
 
 ♻️ Отходы:
-🔧 Пакетосварка: {values['Пакетосварка']} кг
-🖨️ Флекса: {values['Флекса']} кг
-🧵 Экструзия: {values['Экструзия']} кг
+🔧 Пакетосварка: {int(pak)} кг
+🖨️ Флекса: {int(fle)} кг
+🧵 Экструзия: {int(ext)} кг
 
-🧾 Итого отходов: {values['Итого']} кг
+🧾 Итого отходов: {int(total)} кг
 
-📊 Всего продукции за период: {int(total_pakov)} паков / {int(total_ves)} кг
+📊 Всего продукции за период: {int(total_pakov_all)} паков / {int(total_ves_all)} кг
 """
     await update.message.reply_text(report.strip())
 
+# /csv — файл с данными
 async def cmd_csv(update, context):
     if not is_allowed(update):
         return
     file_path = get_csv_file()
-    await update.message.reply_document(open(file_path, "rb"))
+    await update.message.reply_document(open(file_path, 'rb'))
 
+# /stats — статистика
 async def cmd_stats(update, context):
     if not is_allowed(update):
         return
-    lines = ["📊 Статистика по сменам:"]
-    for user, days in user_days.items():
-        lines.append(f"👤 {user}: {len(days)} смен")
+
+    lines = ["📊 Статистика по пользователям:"]
+    for user in user_stats:
+        stats = user_stats[user]
+        shifts = len(user_days.get(user, []))
+        lines.append(
+            f"👤 {user} ({shifts} смен):\n"
+            f"  🧃 Паков: {int(stats['Паков'])} шт\n"
+            f"  ⚖️  Вес: {int(stats['Вес'])} кг\n"
+            f"  🛍️ Пакетосварка: {int(stats['Пакетосварка'])} кг\n"
+            f"  🎨 Флекса: {int(stats['Флекса'])} кг\n"
+            f"  🧵 Экструзия: {int(stats['Экструзия'])} кг\n"
+            f"  ♻️ Итого отходов: {int(stats['Итого'])} кг"
+        )
+
     await update.message.reply_text("\n".join(lines))
 
+# /reset — сброс
 async def cmd_reset(update, context):
     if not is_allowed(update):
         return
     user_stats.clear()
     user_days.clear()
-    await update.message.reply_text("♻️ Статистика сброшена!")
+    await update.message.reply_text("♻️ Статистика за месяц сброшена! (Excel не тронут)")
 
+# /myid — Telegram ID
 async def cmd_myid(update, context):
     if update.message.chat.type != "private":
-        await update.message.reply_text("ℹ️ Напишите команду в личку боту.")
+        await update.message.reply_text("ℹ️ Запросите свой ID в личке бота.")
         return
     user_id = update.effective_user.id
-    await update.message.reply_text(f"🆔 Ваш ID: `{user_id}`", parse_mode="Markdown")
+    await update.message.reply_text(f"🆔 Ваш Telegram ID: `{user_id}`", parse_mode="Markdown")
 
+# Запуск бота
 def main():
-    load_stats_from_excel()
-
+    if not TOKEN:
+        raise ValueError("TELEGRAM_TOKEN env variable is required")
     app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     app.add_handler(CommandHandler("csv", cmd_csv))
     app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("myid", cmd_myid))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     app.run_polling()
 
 if __name__ == "__main__":
