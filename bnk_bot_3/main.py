@@ -258,6 +258,7 @@ def main():
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("myid", cmd_myid))
     app.add_handler(CommandHandler("graf", cmd_graf))
+    app.add_handler(CommandHandler("import", cmd_import))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
 
@@ -266,3 +267,70 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+async def cmd_import(update, context):
+    if not is_allowed(update):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
+        return
+
+    if not update.message.document:
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="📄 Пожалуйста, отправьте Excel-файл.")
+        return
+
+    file = await update.message.document.get_file()
+    file_path = f"/tmp/imported.xlsx"
+    await file.download_to_drive(file_path)
+
+    try:
+        wb = load_workbook(file_path)
+        ws = wb.active
+        imported = 0
+
+        from data_utils import save_entry
+
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            date_str, user, pakov, ves, paket, flexa, extru, itogo = row
+            if not user:
+                continue
+
+            try:
+                if isinstance(date_str, str):
+                    date = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+                else:
+                    date = date_str
+            except Exception:
+                date = datetime.now()
+
+            values = {
+                "Паков": pakov or 0,
+                "Вес": ves or 0,
+                "Пакетосварка": paket or 0,
+                "Флекса": flexa or 0,
+                "Экструзия": extru or 0,
+                "Итого": itogo or 0
+            }
+
+            save_entry(date, user, values)
+
+            if user not in user_stats:
+                user_stats[user] = {
+                    'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
+                    'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0
+                }
+
+            user_stats[user]['Паков'] += values["Паков"]
+            user_stats[user]['Вес'] += values["Вес"]
+            user_stats[user]['Пакетосварка'] += values["Пакетосварка"]
+            user_stats[user]['Флекса'] += values["Флекса"]
+            user_stats[user]['Экструзия'] += values["Экструзия"]
+            user_stats[user]['Итого'] += values["Итого"]
+            user_stats[user]['Смен'] += 1
+
+            imported += 1
+
+        await context.bot.send_message(chat_id=update.effective_chat.id,
+                                       text=f"✅ Импорт завершён. Загружено и сохранено записей: {imported}")
+
+    except Exception as e:
+        await context.bot.send_message(chat_id=update.effective_chat.id,
+                                       text=f"❌ Ошибка при импорте: {e}")
