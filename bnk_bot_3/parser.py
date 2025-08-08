@@ -17,16 +17,17 @@ def _extract_number(text, patterns):
     return _to_float(m.group(1)) if m else 0.0
 
 
+
 def _parse_extrusion(text):
     """
     Парсит экструзию (экструзия|экструдер), поддерживает:
-      - 'м65.5', 'м 65.5', 'м:65,5', 'м-65.5'
-      - 'т12', 'т 0.6', 'т-12.8'
-    Возвращает сумму мягких и твёрдых (float).
+      - 'м65.5', 'т12', 'мягкие 3.5', 'твердые 1.2' и т.п.
     """
-    # общий блок, допускаем любые символы между ключом и числом
-    m_match = re.search(r"(?:экструзия|экструдер).*?[мm]\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
-    t_match = re.search(r"(?:экструзия|экструдер).*?[тt]\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+    m_patterns = r"[мm]|мягк(?:ие|ое)?"
+    t_patterns = r"[тt]|твёрд(?:ые|ое)?|тверд(?:ые|ое)?"
+
+    m_match = re.search(rf"(?:экструзия|экструдер).*?{m_patterns}\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+    t_match = re.search(rf"(?:экструзия|экструдер).*?{t_patterns}\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
 
     m_val = _to_float(m_match.group(1)) if m_match else 0.0
     t_val = _to_float(t_match.group(1)) if t_match else 0.0
