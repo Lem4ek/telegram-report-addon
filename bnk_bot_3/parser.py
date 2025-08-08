@@ -20,16 +20,14 @@ def _extract_number(text, patterns):
 
 def _parse_extrusion(text):
     """
-    Парсит экструзию (экструзия|экструдер), включая синонимы для мягких и твёрдых отходов.
-    Поддержка:
-    - м, мягк, мягкие, мягкое, мяг., мягч
-    - т, тверд, твёрд, твердое, твёрдое, твер., тв
+    Парсит экструзию (экструзия|экструдер), поддерживает:
+      - 'м65.5', 'т12', 'мягкие 3.5', 'твердые 1.2' и т.п.
     """
-    m_patterns = r"[мm]|мяг(?:к|кие|кое|ч|\\.|\\-)?"
-    t_patterns = r"[тt]|тв(?:ёрд|ерд|ёрдое|ердое|\\.|\\-)?"
+    m_patterns = r"[мm]|мягк(?:ие|ое)?"
+    t_patterns = r"[тt]|твёрд(?:ые|ое)?|тверд(?:ые|ое)?"
 
-    m_match = re.search(rf"(?:экструзия|экструдер).*?{m_patterns}\\s*[:\\-]?\\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
-    t_match = re.search(rf"(?:экструзия|экструдер).*?{t_patterns}\\s*[:\\-]?\\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+    m_match = re.search(rf"(?:экструзия|экструдер).*?{m_patterns}\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+    t_match = re.search(rf"(?:экструзия|экструдер).*?{t_patterns}\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
 
     m_val = _to_float(m_match.group(1)) if m_match else 0.0
     t_val = _to_float(t_match.group(1)) if t_match else 0.0
