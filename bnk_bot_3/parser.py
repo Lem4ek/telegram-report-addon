@@ -15,19 +15,16 @@ def _extract_number(text, patterns):
 
 def _parse_extrusion(text):
     """
-    Парсит экструзию (экструзия|экструдер), включая сокращения и синонимы для мягких и твёрдых отходов.
-    Поддержка:
-    - м, мягк, мягкие, мягкое, мяг., мягч, m
-    - т, тверд, твёрд, твердое, твёрдое, твер., тв, t
+    Глобальный поиск мягких и твёрдых отходов в любом месте текста, даже если строки разделены.
     """
-    m_patterns = r"[мm]|мяг(?:к|кие|кое|ч|\.|\-)?|мягк"
-    t_patterns = r"[тt]|тв(?:ёрд|ерд|ёрдое|ердое|в)?|тверд(?:ое|ые)?|тв"
+    m_patterns = r"(?:мягк(?:ие|ое)?|мягч|мяг\.?|[мm])"
+    t_patterns = r"(?:тв(?:ёрд|ерд|в)?|тверд(?:ое|ые)?|тв\.?|[тt])"
 
-    m_match = re.search(rf"(?:экструзия|экструдер).*?{m_patterns}\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
-    t_match = re.search(rf"(?:экструзия|экструдер).*?{t_patterns}\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+    m_all = re.findall(rf"{m_patterns}\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+    t_all = re.findall(rf"{t_patterns}\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
 
-    m_val = _to_float(m_match.group(1)) if m_match else 0.0
-    t_val = _to_float(t_match.group(1)) if t_match else 0.0
+    m_val = sum(_to_float(x) for x in m_all)
+    t_val = sum(_to_float(x) for x in t_all)
     return round(m_val + t_val, 2)
 
 
