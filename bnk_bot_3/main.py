@@ -47,6 +47,11 @@ def load_stats_from_excel():
         if user not in user_stats:
             user_stats[user] = {'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
                                 'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0}
+            }
+        else:
+            # если словарь уже есть, но в нём нет ключа "Смен"
+            user_stats[user].setdefault('Смен', 0)
+        user_stats[user]['Смен'] += 1   
         user_stats[user]['Паков'] += safe_float(pakov)
         user_stats[user]['Вес'] += safe_float(ves)
         user_stats[user]['Пакетосварка'] += safe_float(paket)
