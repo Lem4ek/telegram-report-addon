@@ -330,7 +330,7 @@ def main():
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("myid", cmd_myid))
     app.add_handler(CommandHandler("graf", cmd_graf))
-    app.add_handler(CommandHandler("import", cmd_import))
+    app.add_handler(MessageHandler(filters.Document.ALL & filters.Caption("/import"), cmd_import))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
 
