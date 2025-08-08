@@ -1,46 +1,78 @@
 import re
 
+def _to_float(s):
+    try:
+        return float(str(s).replace(",", "."))
+    except Exception:
+        return 0.0
+
+
+def _extract_number(text, patterns):
+    """
+    Ищет первое число после любого из ключевых слов из patterns (регекс-строка с вариантами).
+    Например: patterns="паков|паки|упаковка"
+    Возвращает float (включая десятичные).
+    """
+    m = re.search(rf"(?:{patterns})\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+    return _to_float(m.group(1)) if m else 0.0
+
+
+def _parse_extrusion(text):
+    """
+    Парсит экструзию (экструзия|экструдер), поддерживает:
+      - 'м65.5', 'м 65.5', 'м:65,5', 'м-65.5'
+      - 'т12', 'т 0.6', 'т-12.8'
+    Возвращает сумму мягких и твёрдых (float).
+    """
+    # общий блок, допускаем любые символы между ключом и числом
+    m_match = re.search(r"(?:экструзия|экструдер).*?[мm]\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+    t_match = re.search(r"(?:экструзия|экструдер).*?[тt]\s*[:\-]?\s*([0-9]+[.,]?[0-9]*)", text, re.IGNORECASE)
+
+    m_val = _to_float(m_match.group(1)) if m_match else 0.0
+    t_val = _to_float(t_match.group(1)) if t_match else 0.0
+    return round(m_val + t_val, 2)
+
+
 def parse_message(text):
-    text = text.lower().strip()
+    """
+    Возвращает словарь только с найденными ключами:
+      Паков, Вес, Пакетосварка, Флекса, Экструзия
+    Никакой дополнительной фильтрации тут нет — фильтр по 'вес/итого'
+    делает main.py (чтобы не дублировать логику).
+    """
+    txt = text.lower()
 
-    results = {
-        "Паков": 0,
-        "Вес": 0,
-        "Пакетосварка": 0,
-        "Флекса": 0,
-        "Экструзия": 0,
-    }
+    result = {}
 
-    # Шаблоны
-    patterns = {
-        "Паков": r"(паков|паки|упаковка)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)",
-        "Вес": r"вес\s*[:\-]?\s*(\d+(?:[.,]\d+)?)",
-        "Пакетосварка": r"пакетосварка\s*[:\-]?\s*(\d+(?:[.,]\d+)?)",
-        "Флекса": r"флекс[а-я]*\s*[:\-]?\s*(\d+(?:[.,]\d+)?)",
-        "Экструзия": r"(экструзия|экструдер)[^\d]*(м)?\s*([\d.,]+)?\s*(т)?[^\d]*([\d.,]+)?"
-    }
+    # Паков (синонимы)
+    pak = _extract_number(txt, r"паков|паки|упаковка|упаковок")
+    if pak:
+        result["Паков"] = pak
 
-    # Обработка экструзии
-    match = re.search(patterns["Экструзия"], text)
-    if match:
-        m_val = match.group(3)
-        t_val = match.group(5)
-        m = float(m_val.replace(",", ".")) if m_val else 0
-        t = float(t_val.replace(",", ".")) if t_val else 0
-        results["Экструзия"] = round(m + t, 2)
+    # Вес
+    ves = _extract_number(txt, r"вес")
+    if ves:
+        result["Вес"] = ves
 
-    # Остальные ключи
-    for key in ["Паков", "Вес", "Пакетосварка", "Флекса"]:
-        match = re.search(patterns[key], text)
-        if match:
-            value = match.group(2) if len(match.groups()) > 1 else match.group(1)
-            try:
-                results[key] = round(float(value.replace(",", ".")), 2)
-            except ValueError:
-                pass
+    # Пакетосварка
+    paketo = _extract_number(txt, r"пакетосварка")
+    if paketo:
+        result["Пакетосварка"] = paketo
 
-    # Если нет слова "вес" или "всего", считаем, что это не отчет
-    if not re.search(r"\b(вес|всего)\b", text):
-        return {}
+    # Флекса (учтём 'фоекса' как опечатку + 'флексография')
+    flexa = _extract_number(txt, r"флекса|флексография|флексо|фоекса|флекс")
+    if flexa:
+        result["Флекса"] = flexa
 
-    return results
+    # Экструзия / Экструдер
+    if re.search(r"(экструзия|экструдер)", txt, re.IGNORECASE):
+        ext = _parse_extrusion(txt)
+        if ext:
+            result["Экструзия"] = ext
+        else:
+            # запасной вариант: просто число после слова
+            ext_fallback = _extract_number(txt, r"экструзия|экструдер")
+            if ext_fallback:
+                result["Экструзия"] = ext_fallback
+
+    return result
