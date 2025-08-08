@@ -65,7 +65,7 @@ async def delayed_save(message_id):
         values = data["values"]
 
         user_stats.setdefault(username, {'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
-                                         'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0})
+                                         'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0})
         for k in values:
             if k in user_stats[username] and isinstance(values[k], (int, float)):
                 user_stats[username][k] += values[k]
