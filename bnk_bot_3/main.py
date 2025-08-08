@@ -45,11 +45,8 @@ def load_stats_from_excel():
         if not user:
             continue
         if user not in user_stats:
-            user_stats[user] = {
-                'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
-                'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0
-             }
-        user_stats[user]['Смен'] += 1
+            user_stats[user] = {'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
+                                'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0}
         user_stats[user]['Паков'] += safe_float(pakov)
         user_stats[user]['Вес'] += safe_float(ves)
         user_stats[user]['Пакетосварка'] += safe_float(paket)
@@ -253,6 +250,13 @@ async def cmd_import(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
         return
+    # Удалим текущий Excel-файл и сбросим статистику
+    from pathlib import Path
+    current_file = Path(get_csv_file())
+    if current_file.exists():
+        current_file.unlink()
+        user_stats.clear()
+
 
     if not update.message.document:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="📄 Пожалуйста, отправьте Excel-файл.")
@@ -330,7 +334,7 @@ def main():
     app.add_handler(CommandHandler("reset", cmd_reset))
     app.add_handler(CommandHandler("myid", cmd_myid))
     app.add_handler(CommandHandler("graf", cmd_graf))
-    app.add_handler(MessageHandler(filters.Document.ALL & filters.Caption("/import"), cmd_import))
+    app.add_handler(CommandHandler("import", cmd_import))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
 
