@@ -69,7 +69,8 @@ async def delayed_save(message_id):
         for k in values:
             if k in user_stats[username] and isinstance(values[k], (int, float)):
                 user_stats[username][k] += values[k]
-
+                
+        user_stats[username]['Смен'] += 1
         total_pakov_all = sum(u['Паков'] for u in user_stats.values())
         total_ves_all = sum(u['Вес'] for u in user_stats.values())
 
