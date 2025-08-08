@@ -245,28 +245,6 @@ async def cmd_graf(update, context):
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img3, "rb"))
 
 
-def main():
-    if not TOKEN:
-        raise ValueError("TELEGRAM_TOKEN env variable is required")
-
-    load_stats_from_excel()
-
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("csv", cmd_csv))
-    app.add_handler(CommandHandler("stats", cmd_stats))
-    app.add_handler(CommandHandler("reset", cmd_reset))
-    app.add_handler(CommandHandler("myid", cmd_myid))
-    app.add_handler(CommandHandler("graf", cmd_graf))
-    app.add_handler(CommandHandler("import", cmd_import))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
-
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
 
 async def cmd_import(update, context):
     if not is_allowed(update):
@@ -336,3 +314,26 @@ async def cmd_import(update, context):
     except Exception as e:
         await context.bot.send_message(chat_id=update.effective_chat.id,
                                        text=f"❌ Ошибка при импорте: {e}")
+def main():
+    if not TOKEN:
+        raise ValueError("TELEGRAM_TOKEN env variable is required")
+
+    load_stats_from_excel()
+
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("csv", cmd_csv))
+    app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("myid", cmd_myid))
+    app.add_handler(CommandHandler("graf", cmd_graf))
+    app.add_handler(CommandHandler("import", cmd_import))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
+
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
+
