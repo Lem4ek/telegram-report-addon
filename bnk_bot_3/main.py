@@ -31,6 +31,13 @@ def is_allowed(update):
     return username in ALLOWED_USERS or user_id in ALLOWED_USERS
 
 
+# ✅ Новый фильтр: сообщение засчитывается только если содержит все обязательные слова
+def is_valid_report(text: str) -> bool:
+    required_words = ["паков", "вес", "отход", "пакетосварка", "экструзия"]
+    t = text.lower()
+    return all(word in t for word in required_words)
+
+
 def load_stats_from_excel():
     """Загружает статистику из текущего Excel в user_stats при старте"""
     file_path = get_csv_file()
@@ -69,7 +76,7 @@ async def delayed_save(message_id):
         for k in values:
             if k in user_stats[username] and isinstance(values[k], (int, float)):
                 user_stats[username][k] += values[k]
-                
+
         user_stats[username]['Смен'] += 1
         total_pakov_all = sum(u['Паков'] for u in user_stats.values())
         total_ves_all = sum(u['Вес'] for u in user_stats.values())
@@ -106,6 +113,11 @@ async def handle_message(update, context):
 
     username = update.effective_user.first_name
     text = update.message.text
+
+    # ✅ Проверка формата отчёта по ключевым словам
+    if not is_valid_report(text):
+        return
+
     values = parse_message(text)
     if not values:
         return
@@ -138,6 +150,11 @@ async def handle_edited_message(update, context):
         return
 
     text = update.edited_message.text
+
+    # ✅ Тоже фильтруем правки, чтобы не засчитывать чужие форматы
+    if not is_valid_report(text):
+        return
+
     values = parse_message(text)
     if sum(1 for v in values.values() if v not in (0, "", None)) < 3:
         return
@@ -247,7 +264,6 @@ async def cmd_graf(update, context):
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img3, "rb"))
 
 
-
 async def cmd_import(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
@@ -258,7 +274,6 @@ async def cmd_import(update, context):
     if current_file.exists():
         current_file.unlink()
         user_stats.clear()
-
 
     if not update.message.document:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="📄 Пожалуйста, отправьте Excel-файл.")
@@ -280,7 +295,6 @@ async def cmd_import(update, context):
             if not user:
                 continue
 
-            
             try:
                 if isinstance(date_str, str):
                     date = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
@@ -288,7 +302,6 @@ async def cmd_import(update, context):
                     date = date_str
             except Exception:
                 date = datetime.now()
-
 
             values = {
                 "Паков": pakov or 0,
@@ -323,6 +336,8 @@ async def cmd_import(update, context):
     except Exception as e:
         await context.bot.send_message(chat_id=update.effective_chat.id,
                                        text=f"❌ Ошибка при импорте: {e}")
+
+
 def main():
     if not TOKEN:
         raise ValueError("TELEGRAM_TOKEN env variable is required")
@@ -345,4 +360,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
