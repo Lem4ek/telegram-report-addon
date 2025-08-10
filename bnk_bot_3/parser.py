@@ -1,8 +1,12 @@
-# parse.py
 import re
 
-# Числа вида: 1 500, 1392,2, 16.4, 0.9, 12 и т.п.
+# 1 500, 1392,2, 16.4, 0.9, 12 и т.п.
 NUM_RE = re.compile(r'(?:(?:\d{1,3}(?:[ \u00A0]\d{3})+|\d+)(?:[.,]\d+)?)')
+
+SECTION_STOP_RE = re.compile(
+    r'(?:^|\b)(паков|вес|флекс|пакетосвар|окраш|итого|всего)\b',
+    re.IGNORECASE
+)
 
 def _to_float(s: str) -> float:
     s = str(s).replace('\u00A0', '').replace(' ', '').replace(',', '.')
@@ -15,10 +19,7 @@ def _sum_numbers_in_line(line: str) -> float:
     return sum(_to_float(m.group(0)) for m in NUM_RE.finditer(line))
 
 def _extract_number(text: str, patterns: str) -> float:
-    """
-    Ищет первое число в каждой строке, где встречается один из шаблонов (patterns).
-    Если таких строк несколько — суммируем найденные числа.
-    """
+    """Сумма первых чисел в строках, где встречается один из patterns."""
     pat = re.compile(rf'(?:{patterns})', re.IGNORECASE)
     total = 0.0
     for raw in text.splitlines():
@@ -33,67 +34,60 @@ def _extract_number(text: str, patterns: str) -> float:
 
 def _parse_extrusion(text: str) -> float:
     """
-    Экструзия считается ТОЛЬКО:
-      1) из строки, где есть 'экструз' или 'экструдер';
-      2) из следующих ниже строк (до 6 непустых, пустые можно пропускать),
-         которые начинаются на мяг/тв (варианты: 'м', 'мягк', 'тв', 'твёрд', 'тв.').
-    'итого/всего' блок экструзии прерывают и не суммируются.
-    Любой другой раздел (напр. 'Флекса', 'Окрашено') — завершает блок.
+    Экструзия = числа:
+      • в строке с 'экструз'/'экструдер'
+      • + в следующих до 8 непустых строках (пустые пропускаем), если в строке встречается 'мяг' или 'тв'
+    Блок обрывается, если встречаем другой раздел (флекса/пакетосварка/окрашено/паков/вес/итого/всего).
     """
     lines = [ln.rstrip() for ln in text.splitlines()]
     total = 0.0
 
-    extru_re = re.compile(r'(экструз|экструд)', re.IGNORECASE)         # экструзия/экструдер
-    soft_re  = re.compile(r'^\W*(?:мягк|мяг\.?|м)\b', re.IGNORECASE)   # мяг, мягкие, м
-    hard_re  = re.compile(r'^\W*(?:тв(?:ёрд|ерд)|тв\.?|т)\b', re.IGNORECASE)  # тв, твердые, т
-    skip_sum = re.compile(r'^\W*(?:итого|всего)\b', re.IGNORECASE)
+    extru_re = re.compile(r'(экструз|экструд)', re.IGNORECASE)
+    # Разрешаем не только начало строки, но и "… мягкие 14 …", "… т 0.9"
+    soft_re  = re.compile(r'(?:^|\W)(мягк\w*|м\b)', re.IGNORECASE)
+    hard_re  = re.compile(r'(?:^|\W)(тв(?:ёрд|ерд)\w*|тв\.?|т\b)', re.IGNORECASE)
 
     i = 0
     while i < len(lines):
-        line_l = lines[i].lower()
-        if extru_re.search(line_l) and not skip_sum.search(line_l):
-            # Числа прямо в строке экструзии (если есть)
-            total += _sum_numbers_in_line(lines[i])
+        line = lines[i]
+        low = line.lower()
+        if extru_re.search(low) and not SECTION_STOP_RE.search(low):
+            # числа прямо в строке экструзии (если есть)
+            total += _sum_numbers_in_line(line)
 
-            # Смотрим вниз до 6 непустых строк, пропуская пустые
             nonempty_seen = 0
             j = i + 1
-            while j < len(lines) and nonempty_seen < 6:
+            while j < len(lines) and nonempty_seen < 8:
                 nxt = lines[j]
-                nxt_l = nxt.lower()
-
                 if not nxt.strip():
                     j += 1
-                    continue  # пустую строку просто пропускаем
+                    continue  # пустые строки пропускаем
 
                 nonempty_seen += 1
+                nxt_low = nxt.lower()
 
-                if skip_sum.search(nxt_l):
-                    break  # дошли до 'итого/всего' — стоп блока
+                # если пошёл другой раздел — выходим из блока
+                if SECTION_STOP_RE.search(nxt_low):
+                    break
 
-                if soft_re.search(nxt_l) or hard_re.search(nxt_l):
+                # "мяг"/"тв" — суммируем числа
+                if soft_re.search(nxt_low) or hard_re.search(nxt_low):
                     total += _sum_numbers_in_line(nxt)
                     j += 1
                     continue
 
-                # Любой другой раздел — завершаем блок экструзии
+                # не мяг/тв и не пусто — это уже другой контент → выходим
                 break
         i += 1
 
     return round(total, 2)
 
 def parse_message(text: str) -> dict:
-    """
-    Возвращает dict с найденными значениями.
-    Суммирование идёт только по строкам, где встречается соответствующее слово.
-    Ничего не тянем из несвязанных строк (например, '7м 15000' вне блока экструзии).
-    """
-    # Нормализуем ё/е
+    """Парсинг отчёта по строкам. Ничего не тянем из несвязанных блоков."""
     txt = text.replace('Ё', 'Е').replace('ё', 'е')
 
     res = {}
 
-    # Паков / Вес — число из соответствующих строк (суммируем, если несколько строк)
     pak = _extract_number(txt, r'паков|паки|упаковка|упаковок')
     if pak:
         res["Паков"] = pak
@@ -102,7 +96,6 @@ def parse_message(text: str) -> dict:
     if ves:
         res["Вес"] = ves
 
-    # Пакетосварка и Флекса — сумма чисел во всех строках с этими словами
     def sum_by_keyword(all_text: str, kw_pattern: str) -> float:
         total = 0.0
         kw = re.compile(kw_pattern, re.IGNORECASE)
@@ -122,13 +115,11 @@ def parse_message(text: str) -> dict:
     if flexa:
         res["Флекса"] = flexa
 
-    # Экструзия — специальная логика (строка экструзии + до 6 непустых строк ниже с мяг/тв)
     if re.search(r'(экструз|экструд)', txt, re.IGNORECASE):
-        ext = _parse_extrusion(text)  # важно: исходный текст с переносами
+        ext = _parse_extrusion(text)  # исходный текст с переносами
         if ext:
             res["Экструзия"] = ext
         else:
-            # запасной вариант — число в той же строке, где упоминается экструзия/экструдер
             fallback = _extract_number(txt, r'экструзия|экструдер')
             if fallback:
                 res["Экструзия"] = fallback
