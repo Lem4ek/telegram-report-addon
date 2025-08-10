@@ -33,7 +33,7 @@ def is_allowed(update):
 
 # ✅ Новый фильтр: сообщение засчитывается только если содержит все обязательные слова
 def is_valid_report(text: str) -> bool:
-    required_words = ["паков", "вес", "отход", "пакетосварка", "экструзия"]
+    required_words = ["паков", "вес", "отход", "пакетосварка", "экстру"]
     t = text.lower()
     return all(word in t for word in required_words)
 
