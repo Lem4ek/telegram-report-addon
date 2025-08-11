@@ -15,8 +15,7 @@ user_stats = {}
 current_month = datetime.now().month
 pending_updates = {}
 
-SAVE_DELAY = timedelta(minutes=2)  # тестовая задержка 2 минуты
-
+SAVE_DELAY = timedelta(minutes=2)  # задержка перед записью
 
 def safe_float(value):
     try:
@@ -24,19 +23,22 @@ def safe_float(value):
     except (ValueError, TypeError):
         return 0.0
 
-
 def is_allowed(update):
     user_id = update.effective_user.id
     username = update.effective_user.first_name
     return username in ALLOWED_USERS or user_id in ALLOWED_USERS
 
-
-# ✅ Новый фильтр: сообщение засчитывается только если содержит все обязательные слова
+# ✅ Фильтр отчёта: требуем присутствие всех ключевых разделов с вариантами слов
 def is_valid_report(text: str) -> bool:
-    required_words = ["паков", "вес", "отход", "пакетосварка", "экстру"]
     t = text.lower()
-    return all(word in t for word in required_words)
-
+    groups = [
+        ["паков", "паки", "упаков"],  # Паков/Паки/Упаков...
+        ["вес"],                      # Вес
+        ["отход"],                    # Отход/Отходы
+        ["пакетосвар"],               # Пакетосварка
+        ["экструз", "экструд"],       # Экструзия/Экструдер
+    ]
+    return all(any(v in t for v in grp) for grp in groups)
 
 def load_stats_from_excel():
     """Загружает статистику из текущего Excel в user_stats при старте"""
@@ -61,7 +63,6 @@ def load_stats_from_excel():
         user_stats[user]['Флекса'] += safe_float(flexa)
         user_stats[user]['Экструзия'] += safe_float(extru)
         user_stats[user]['Итого'] += safe_float(itogo)
-
 
 async def delayed_save(message_id):
     await asyncio.sleep(SAVE_DELAY.total_seconds())
@@ -94,11 +95,10 @@ async def delayed_save(message_id):
 
 🧾 Итого отходов: {values['Итого']:.2f} кг
 
-📊 Всего продукции за период: {total_pakov_all:.2f} паков / {total_ves_all:.2f} кг
+📊 Всего продукции за период: {total_pаков_all:.2f} паков / {total_ves_all:.2f} кг
 """.strip()
 
         await data["context"].bot.send_message(chat_id=data["chat_id"], text=report)
-
 
 async def handle_message(update, context):
     global current_month
@@ -114,7 +114,7 @@ async def handle_message(update, context):
     username = update.effective_user.first_name
     text = update.message.text
 
-    # ✅ Проверка формата отчёта по ключевым словам
+    # ✅ Фильтр отчёта
     if not is_valid_report(text):
         return
 
@@ -122,6 +122,7 @@ async def handle_message(update, context):
     if not values:
         return
 
+    # Минимум 3 непустых поля
     if sum(1 for v in values.values() if v not in (0, "", None)) < 3:
         return
 
@@ -141,7 +142,6 @@ async def handle_message(update, context):
 
     asyncio.create_task(delayed_save(message_id))
 
-
 async def handle_edited_message(update, context):
     if not update.edited_message or not update.edited_message.text:
         return
@@ -151,7 +151,6 @@ async def handle_edited_message(update, context):
 
     text = update.edited_message.text
 
-    # ✅ Тоже фильтруем правки, чтобы не засчитывать чужие форматы
     if not is_valid_report(text):
         return
 
@@ -167,7 +166,6 @@ async def handle_edited_message(update, context):
     pending_updates[message_id]["values"] = values
     pending_updates[message_id]["time"] = datetime.now()
 
-
 async def cmd_csv(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
@@ -175,13 +173,11 @@ async def cmd_csv(update, context):
     file_path = get_csv_file()
     await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, 'rb'))
 
-
 async def cmd_stats(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text=generate_stats(user_stats))
-
 
 async def cmd_reset(update, context):
     if not is_allowed(update):
@@ -191,7 +187,6 @@ async def cmd_reset(update, context):
     pending_updates.clear()
     await context.bot.send_message(chat_id=update.effective_chat.id, text="♻️ Статистика и буфер сброшены! (Excel не тронут)")
 
-
 async def cmd_myid(update, context):
     if update.message.chat.type != "private":
         await context.bot.send_message(chat_id=update.effective_chat.id, text="ℹ️ Запросите ID в личке.")
@@ -199,7 +194,6 @@ async def cmd_myid(update, context):
     await context.bot.send_message(chat_id=update.effective_chat.id,
                                    text=f"🆔 Ваш Telegram ID: `{update.effective_user.id}`",
                                    parse_mode="Markdown")
-
 
 async def cmd_graf(update, context):
     if not is_allowed(update):
@@ -223,7 +217,7 @@ async def cmd_graf(update, context):
     daily = df.groupby(df["Дата"].dt.date).agg({"Вес": "sum", "Итого": "sum"}).reset_index()
     plt.figure()
     plt.plot(daily["Дата"], daily["Вес"], marker="o", label="Вес (кг)")
-    plt.plot(daily["Дата"], daily["Итого"], marker="o", label="Отходы (кг)", color="red")
+    plt.plot(daily["Дата"], daily["Итого"], marker="o", label="Отходы (кг)")
     plt.title("Производство и отходы по дням")
     plt.xlabel("Дата")
     plt.ylabel("Кг")
@@ -253,16 +247,14 @@ async def cmd_graf(update, context):
     total_waste = df["Итого"].sum()
     labels = ["Продукция", "Отходы"]
     sizes = [total_weight - total_waste, total_waste]
-    colors = ["#4CAF50", "#F44336"]
     plt.figure()
-    plt.pie(sizes, labels=labels, autopct="%1.1f%%", colors=colors, startangle=90)
+    plt.pie(sizes, labels=labels, autopct="%1.1f%%", startangle=90)
     plt.axis("equal")
     plt.title("Доля отходов в общей массе")
     img3 = "/tmp/graf3.png"
     plt.savefig(img3)
     plt.close()
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img3, "rb"))
-
 
 async def cmd_import(update, context):
     if not is_allowed(update):
@@ -337,7 +329,6 @@ async def cmd_import(update, context):
         await context.bot.send_message(chat_id=update.effective_chat.id,
                                        text=f"❌ Ошибка при импорте: {e}")
 
-
 def main():
     if not TOKEN:
         raise ValueError("TELEGRAM_TOKEN env variable is required")
@@ -356,7 +347,6 @@ def main():
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
 
     app.run_polling()
-
 
 if __name__ == "__main__":
     main()
