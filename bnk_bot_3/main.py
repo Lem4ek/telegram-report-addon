@@ -15,7 +15,8 @@ user_stats = {}
 current_month = datetime.now().month
 pending_updates = {}
 
-SAVE_DELAY = timedelta(minutes=2)  # задержка перед записью
+SAVE_DELAY = timedelta(minutes=2)  # задержка перед записью/отправкой
+
 
 def safe_float(value):
     try:
@@ -23,10 +24,12 @@ def safe_float(value):
     except (ValueError, TypeError):
         return 0.0
 
+
 def is_allowed(update):
     user_id = update.effective_user.id
     username = update.effective_user.first_name
     return username in ALLOWED_USERS or user_id in ALLOWED_USERS
+
 
 # ✅ Фильтр отчёта: требуем присутствие всех ключевых разделов с вариантами слов
 def is_valid_report(text: str) -> bool:
@@ -39,6 +42,7 @@ def is_valid_report(text: str) -> bool:
         ["экструз", "экструд"],       # Экструзия/Экструдер
     ]
     return all(any(v in t for v in grp) for grp in groups)
+
 
 def load_stats_from_excel():
     """Загружает статистику из текущего Excel в user_stats при старте"""
@@ -64,41 +68,69 @@ def load_stats_from_excel():
         user_stats[user]['Экструзия'] += safe_float(extru)
         user_stats[user]['Итого'] += safe_float(itogo)
 
+
 async def delayed_save(message_id):
-    await asyncio.sleep(SAVE_DELAY.total_seconds())
-    if message_id in pending_updates:
+    try:
+        await asyncio.sleep(SAVE_DELAY.total_seconds())
+        if message_id not in pending_updates:
+            return
+
         data = pending_updates.pop(message_id)
-        save_entry(data["time"], data["user"], data["values"])
+        bot = data["context"].bot
+        chat_id = data["chat_id"]
         username = data["user"]
         values = data["values"]
 
-        user_stats.setdefault(username, {'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
-                                         'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0})
-        for k in values:
-            if k in user_stats[username] and isinstance(values[k], (int, float)):
-                user_stats[username][k] += values[k]
+        # 1) Сохраняем в файл
+        save_entry(data["time"], username, values)
 
+        # 2) Обновляем статистику в памяти
+        user_stats.setdefault(username, {
+            'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
+            'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0
+        })
+        for k, v in values.items():
+            if k in user_stats[username] and isinstance(v, (int, float)):
+                user_stats[username][k] += v
         user_stats[username]['Смен'] += 1
-        total_pakov_all = sum(u['Паков'] for u in user_stats.values())
-        total_ves_all = sum(u['Вес'] for u in user_stats.values())
 
+        total_pakov_all = sum(u.get('Паков', 0.0) for u in user_stats.values())
+        total_ves_all = sum(u.get('Вес', 0.0) for u in user_stats.values())
+
+        # 3) Формируем отчёт
         report = f"""
 📦 Отчёт за смену:
 
-📦  Паков: {values['Паков']:.2f} шт
-⚖️ Вес: {values['Вес']:.2f} кг
+📦  Паков: {values.get('Паков', 0.0):.2f} шт
+⚖️ Вес: {values.get('Вес', 0.0):.2f} кг
 
 ♻️ Отходы:
-🛍️ Пакетосварка: {values['Пакетосварка']:.2f} кг
-🎨 Флекса: {values['Флекса']:.2f} кг
-🧵 Экструзия: {values['Экструзия']:.2f} кг
+🛍️ Пакетосварка: {values.get('Пакетосварка', 0.0):.2f} кг
+🎨 Флекса: {values.get('Флекса', 0.0):.2f} кг
+🧵 Экструзия: {values.get('Экструзия', 0.0):.2f} кг
 
-🧾 Итого отходов: {values['Итого']:.2f} кг
+🧾 Итого отходов: {values.get('Итого', 0.0):.2f} кг
 
-📊 Всего продукции за период: {total_pаков_all:.2f} паков / {total_ves_all:.2f} кг
+📊 Всего продукции за период: {total_pakov_all:.2f} паков / {total_ves_all:.2f} кг
 """.strip()
 
-        await data["context"].bot.send_message(chat_id=data["chat_id"], text=report)
+        # 4) Отправляем отчёт в чат
+        await bot.send_message(chat_id=chat_id, text=report)
+
+    except Exception as e:
+        # Лог и короткое уведомление вместо молчаливого падения
+        import traceback
+        print("delayed_save error:", e)
+        print(traceback.format_exc())
+        try:
+            await data["context"].bot.send_message(
+                chat_id=data.get("chat_id"),
+                text="✅ Отчёт сохранён, но не удалось отправить форматированное сообщение. "
+                     f"(ошибка: {e})"
+            )
+        except Exception:
+            pass
+
 
 async def handle_message(update, context):
     global current_month
@@ -142,6 +174,7 @@ async def handle_message(update, context):
 
     asyncio.create_task(delayed_save(message_id))
 
+
 async def handle_edited_message(update, context):
     if not update.edited_message or not update.edited_message.text:
         return
@@ -166,6 +199,7 @@ async def handle_edited_message(update, context):
     pending_updates[message_id]["values"] = values
     pending_updates[message_id]["time"] = datetime.now()
 
+
 async def cmd_csv(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
@@ -173,11 +207,13 @@ async def cmd_csv(update, context):
     file_path = get_csv_file()
     await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, 'rb'))
 
+
 async def cmd_stats(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
         return
     await context.bot.send_message(chat_id=update.effective_chat.id, text=generate_stats(user_stats))
+
 
 async def cmd_reset(update, context):
     if not is_allowed(update):
@@ -187,6 +223,7 @@ async def cmd_reset(update, context):
     pending_updates.clear()
     await context.bot.send_message(chat_id=update.effective_chat.id, text="♻️ Статистика и буфер сброшены! (Excel не тронут)")
 
+
 async def cmd_myid(update, context):
     if update.message.chat.type != "private":
         await context.bot.send_message(chat_id=update.effective_chat.id, text="ℹ️ Запросите ID в личке.")
@@ -194,6 +231,7 @@ async def cmd_myid(update, context):
     await context.bot.send_message(chat_id=update.effective_chat.id,
                                    text=f"🆔 Ваш Telegram ID: `{update.effective_user.id}`",
                                    parse_mode="Markdown")
+
 
 async def cmd_graf(update, context):
     if not is_allowed(update):
@@ -255,6 +293,7 @@ async def cmd_graf(update, context):
     plt.savefig(img3)
     plt.close()
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img3, "rb"))
+
 
 async def cmd_import(update, context):
     if not is_allowed(update):
@@ -329,6 +368,7 @@ async def cmd_import(update, context):
         await context.bot.send_message(chat_id=update.effective_chat.id,
                                        text=f"❌ Ошибка при импорте: {e}")
 
+
 def main():
     if not TOKEN:
         raise ValueError("TELEGRAM_TOKEN env variable is required")
@@ -347,6 +387,7 @@ def main():
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
 
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()
