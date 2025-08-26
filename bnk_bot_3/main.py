@@ -50,6 +50,9 @@ def load_stats_from_excel():
     if not os.path.exists(file_path):
         return
 
+    # на всякий случай обнулим, чтобы не наслаивать
+    user_stats.clear()
+
     wb = load_workbook(file_path)
     ws = wb.active
 
@@ -57,16 +60,24 @@ def load_stats_from_excel():
         date, user, pakov, ves, paket, flexa, extru, itogo = row
         if not user:
             continue
+
         if user not in user_stats:
-            user_stats[user] = {'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
-                                'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0}
-            user_stats[user]['Смен'] += 1
-        user_stats[user]['Паков'] += safe_float(pakov)
-        user_stats[user]['Вес'] += safe_float(ves)
+            user_stats[user] = {
+                'Паков': 0.0, 'Вес': 0.0, 'Пакетосварка': 0.0,
+                'Флекса': 0.0, 'Экструзия': 0.0, 'Итого': 0.0, 'Смен': 0
+            }
+
+        # ✅ ВАЖНО: инкремент на КАЖДУЮ строку пользователя
+        user_stats[user]['Смен'] += 1
+
+        # накопим числовые поля
+        user_stats[user]['Паков']        += safe_float(pakov)
+        user_stats[user]['Вес']          += safe_float(ves)
         user_stats[user]['Пакетосварка'] += safe_float(paket)
-        user_stats[user]['Флекса'] += safe_float(flexa)
-        user_stats[user]['Экструзия'] += safe_float(extru)
-        user_stats[user]['Итого'] += safe_float(itogo)
+        user_stats[user]['Флекса']       += safe_float(flexa)
+        user_stats[user]['Экструзия']    += safe_float(extru)
+        user_stats[user]['Итого']        += safe_float(itogo)
+
 
 
 async def delayed_save(message_id):
