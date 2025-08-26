@@ -268,30 +268,36 @@ async def cmd_graf(update, context):
     except Exception:
         pass
 
-       # =============== ГРАФИК 1: Производство и отходы по дням ===============
+           # =============== ГРАФИК 1: Производство и отходы по дням ===============
     daily = df.groupby(df["Дата"].dt.date).agg({"Вес": "sum", "Итого": "sum"}).reset_index()
 
     fig, ax = plt.subplots()
-    ax.plot(daily["Дата"], daily["Вес"], marker="o", label="Вес (кг)")
-    ax.plot(daily["Дата"], daily["Итого"], marker="o", label="Отходы (кг)")
+    line_w = ax.plot(daily["Дата"], daily["Вес"], marker="o", label="Вес (кг)")
+    line_o = ax.plot(daily["Дата"], daily["Итого"], marker="o", label="Отходы (кг)")
 
     ax.set_title("Производство и отходы по дням")
     ax.set_xlabel("Дата")
     ax.set_ylabel("Кг")
-    plt.xticks(rotation=45)
     ax.legend()
+    ax.grid(True, alpha=0.25)
+    fig.autofmt_xdate()
 
-    # подписи над точками
+    # динамический вертикальный сдвиг подписей (2% диапазона)
+    ymin, ymax = ax.get_ylim()
+    dy = max(1, (ymax - ymin) * 0.02)
+
+    # подписи над точками, с небольшим сдвигом
     for x, y in zip(daily["Дата"], daily["Вес"]):
-        ax.text(x, y, f"{y:.0f}", ha="center", va="bottom", fontsize=8, color="blue")
+        ax.text(x, y + dy, f"{y:.0f}", ha="center", va="bottom", fontsize=8)
     for x, y in zip(daily["Дата"], daily["Итого"]):
-        ax.text(x, y, f"{y:.0f}", ha="center", va="bottom", fontsize=8, color="orange")
+        ax.text(x, y + dy, f"{y:.0f}", ha="center", va="bottom", fontsize=8)
 
     fig.tight_layout()
     img1 = "/tmp/graf1_daily.png"
     fig.savefig(img1)
     plt.close(fig)
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img1, "rb"))
+
 
     # =============== ГРАФИК 2: ТОП производители по весу (кг) ===============
     top_users = (df.groupby("Имя")["Вес"]
