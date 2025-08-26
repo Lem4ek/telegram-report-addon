@@ -257,58 +257,30 @@ async def cmd_graf(update, context):
     except Exception:
         pass
 
-    # =============== ГРАФИК 1: Производство и отходы по дням ===============
-    daily = (df.groupby(df["Дата"].dt.date)[["Вес", "Итого"]]
-               .sum()
-               .reset_index()
-               .rename(columns={"Дата": "День"}))
+       # =============== ГРАФИК 1: Производство и отходы по дням ===============
+    daily = df.groupby(df["Дата"].dt.date).agg({"Вес": "sum", "Итого": "sum"}).reset_index()
 
-    x = list(range(len(daily)))
-    width = 0.4
     fig, ax = plt.subplots()
-
-    bars_weight = ax.bar([i - width/2 for i in x], daily["Вес"], width=width, label="Вес")
-    bars_waste  = ax.bar([i + width/2 for i in x], daily["Итого"], width=width, label="Итого отходов")
+    ax.plot(daily["Дата"], daily["Вес"], marker="o", label="Вес (кг)")
+    ax.plot(daily["Дата"], daily["Итого"], marker="o", label="Отходы (кг)")
 
     ax.set_title("Производство и отходы по дням")
     ax.set_xlabel("Дата")
     ax.set_ylabel("Кг")
-    ax.set_xticks(x, [str(d) for d in daily["День"]], rotation=45, ha="right")
+    plt.xticks(rotation=45)
     ax.legend()
 
-    # ——— Умные подписи: не каждую, а с шагом (зависит от числа столбиков)
-    def smart_step(n: int) -> int:
-        if n <= 12:   return 1
-        if n <= 20:   return 2
-        if n <= 35:   return 3
-        return max(1, n // 12)
-
-    step = smart_step(len(x))
-
-    def add_labels(bars, fmt="{:.0f}", dy=3, every=1):
-        for i, b in enumerate(bars):
-            # показываем каждую every-ю, а также всегда первую и последнюю
-            if i % every != 0 and i not in (0, len(bars) - 1):
-                continue
-            v = b.get_height()
-            ax.annotate(fmt.format(v),
-                        xy=(b.get_x() + b.get_width()/2, v),
-                        xytext=(0, dy), textcoords="offset points",
-                        ha="center", va="bottom", fontsize=8)
-
-    # Немного «развести» подписи двух серий по высоте
-    add_labels(bars_weight, fmt="{:.0f}", dy=8,  every=step)
-    add_labels(bars_waste,  fmt="{:.0f}", dy=3,  every=step)
-
-    # Дать запас сверху, чтобы подписи не упирались в верх графика
-    ax.margins(y=0.15)
+    # подписи над точками
+    for x, y in zip(daily["Дата"], daily["Вес"]):
+        ax.text(x, y, f"{y:.0f}", ha="center", va="bottom", fontsize=8, color="blue")
+    for x, y in zip(daily["Дата"], daily["Итого"]):
+        ax.text(x, y, f"{y:.0f}", ha="center", va="bottom", fontsize=8, color="orange")
 
     fig.tight_layout()
     img1 = "/tmp/graf1_daily.png"
     fig.savefig(img1)
     plt.close(fig)
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img1, "rb"))
-
 
     # =============== ГРАФИК 2: ТОП производители по весу (кг) ===============
     top_users = (df.groupby("Имя")["Вес"]
