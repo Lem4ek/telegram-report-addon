@@ -322,8 +322,49 @@ async def cmd_csv(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
         return
+
+    # если передан аргумент формата YYYY-MM — шлём файл за этот месяц
+    if context.args:
+        ym = context.args[0].strip()
+        from datetime import datetime as _dt
+        try:
+            _dt.strptime(ym, "%Y-%m")
+        except Exception:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Неверный формат. Использование: /csv или /csv YYYY-MM (например, /csv 2025-07)"
+            )
+            return
+
+        try:
+            from data_utils import get_month_file_str
+            file_path = get_month_file_str(ym)
+        except Exception:
+            file_path = os.path.join("/config/bnk_bot/data", f"{ym}.xlsx")
+
+        if not os.path.exists(file_path):
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Файл за {ym} не найден.")
+            return
+
+        await context.bot.send_document(
+            chat_id=update.effective_chat.id,
+            document=open(file_path, "rb"),
+            filename=f"BNK_{ym}.xlsx"
+        )
+        return
+
+    # без аргументов — шлём текущий месяц
     file_path = get_csv_file()
-    await context.bot.send_document(chat_id=update.effective_chat.id, document=open(file_path, 'rb'))
+    if not os.path.exists(file_path):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Файл данных не найден.")
+        return
+
+    await context.bot.send_document(
+        chat_id=update.effective_chat.id,
+        document=open(file_path, 'rb'),
+        filename=f"BNK_{datetime.now():%Y-%m}.xlsx"
+    )
+
 
 async def cmd_stats(update, context):
     if not is_allowed(update):
