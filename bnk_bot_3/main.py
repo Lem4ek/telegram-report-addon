@@ -243,91 +243,112 @@ async def cmd_graf(update, context):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Файл данных не найден.")
         return
 
+    # читаем .xlsx с текущими колонками
     df = pd.read_excel(file_path)
     if df.empty:
         await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ В файле нет данных.")
         return
 
+    # нормализуем названия столбцов на всякий случай
     df.columns = ["Дата", "Имя", "Паков", "Вес", "Пакетосварка", "Флекса", "Экструзия", "Итого"]
-    df["Дата"] = pd.to_datetime(df["Дата"], errors="coerce")
+    # дата как datetime
+    try:
+        df["Дата"] = pd.to_datetime(df["Дата"])
+    except Exception:
+        pass
 
-    # 📈 График 1 — Продукция и отходы по дням
-    daily = df.groupby(df["Дата"].dt.date).agg({"Вес": "sum", "Итого": "sum"}).reset_index()
+    # =============== ГРАФИК 1: Производство и отходы по дням ===============
+    daily = (df.groupby(df["Дата"].dt.date)[["Вес", "Итого"]]
+               .sum()
+               .reset_index()
+               .rename(columns={"Дата": "День"}))
+
+    # рисуем рядом два столбца на дату
+    x = range(len(daily))
+    width = 0.4
     plt.figure()
-    plt.plot(daily["Дата"], daily["Вес"], marker="o", label="Вес (кг)")
-    plt.plot(daily["Дата"], daily["Итого"], marker="o", label="Отходы (кг)")
+    plt.bar([i - width/2 for i in x], daily["Вес"], width=width, label="Вес")
+    plt.bar([i + width/2 for i in x], daily["Итого"], width=width, label="Итого отходов")
     plt.title("Производство и отходы по дням")
     plt.xlabel("Дата")
     plt.ylabel("Кг")
-    plt.xticks(rotation=45)
+    plt.xticks(ticks=list(x), labels=[str(d) for d in daily["День"]], rotation=45, ha="right")
     plt.legend()
+
+    # подписи значений над столбиками
+    for i, v in enumerate(daily["Вес"]):
+        plt.text(i - width/2, v, f"{v:.0f}", ha="center", va="bottom")
+    for i, v in enumerate(daily["Итого"]):
+        plt.text(i + width/2, v, f"{v:.0f}", ha="center", va="bottom")
+
     plt.tight_layout()
-    img1 = "/tmp/graf1.png"
+    img1 = "/tmp/graf1_daily.png"
     plt.savefig(img1)
     plt.close()
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img1, "rb"))
 
-    # 📊 График 2 — ТОП производители
-    top_users = df.groupby("Имя")["Вес"].sum().sort_values(ascending=False)
+    # =============== ГРАФИК 2: ТОП производители по весу (кг) ===============
+    top_users = (df.groupby("Имя")["Вес"]
+                   .sum()
+                   .sort_values(ascending=False)
+                   .head(10))
     plt.figure()
-    top_users.plot(kind="bar")
-    plt.title("ТОП производители по весу")
+    plt.bar(top_users.index, top_users.values)
+    plt.title("ТОП производители по весу (кг)")
+    plt.xlabel("Пользователь")
     plt.ylabel("Кг")
-    plt.xticks(rotation=45)
+    plt.xticks(rotation=45, ha="right")
+
+    # подписи кг
+    for i, v in enumerate(top_users.values):
+        plt.text(i, v, f"{v:.0f}", ha="center", va="bottom")
+
     plt.tight_layout()
-    img2 = "/tmp/graf2.png"
+    img2 = "/tmp/graf2_top_weight.png"
     plt.savefig(img2)
     plt.close()
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img2, "rb"))
 
-    # 🥧 График 3 — Доля отходов
-    total_weight = df["Вес"].sum()
-    total_waste = df["Итого"].sum()
-    labels = ["Продукция", "Отходы"]
-    sizes = [total_weight - total_waste, total_waste]
+    # =============== ГРАФИК 3: Доля отходов в общей массе (pie) ===============
+    total_weight = float(df["Вес"].sum())
+    total_waste = float(df["Итого"].sum())
+    good = max(total_weight - total_waste, 0)
+
     plt.figure()
-    plt.pie(sizes, labels=labels, autopct="%1.1f%%", startangle=90)
+    plt.pie([good, total_waste],
+            labels=["Продукция", "Отходы"],
+            autopct="%1.1f%%",
+            startangle=90)
     plt.axis("equal")
     plt.title("Доля отходов в общей массе")
-    img3 = "/tmp/graf3.png"
+    img3 = "/tmp/graf3_share.png"
     plt.savefig(img3)
     plt.close()
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img3, "rb"))
-    # 📊 График 4 — Топ по браку (%)
-    agg = (df.groupby("Имя")[["Вес", "Итого"]]
+
+    # =============== ГРАФИК 4: ТОП по браку (кг) ===============
+    agg = (df.groupby("Имя")[["Итого"]]
              .sum()
              .reset_index())
-    agg["Процент_брака"] = (agg["Итого"] / agg["Вес"].where(agg["Вес"] != 0)).fillna(0) * 100
-
-    TOP_N = 10  # Сколько пользователей показывать
-    top_percent = agg.sort_values("Процент_брака", ascending=False).head(TOP_N)
+    top_kg = agg.sort_values("Итого", ascending=False).head(10)
 
     plt.figure()
-    plt.bar(top_percent["Имя"], top_percent["Процент_брака"])
-    plt.title(f"Топ по браку (%) (топ {TOP_N})")
+    plt.bar(top_kg["Имя"], top_kg["Итого"])
+    plt.title("Топ по браку (кг)")
     plt.xlabel("Пользователь")
-    plt.ylabel("Брак, % от веса")
+    plt.ylabel("Брак, кг")
     plt.xticks(rotation=45, ha="right")
+
+    # подписи кг над столбцами
+    for i, v in enumerate(top_kg["Итого"]):
+        plt.text(i, v, f"{v:.0f}", ha="center", va="bottom")
+
     plt.tight_layout()
-    img4 = "/tmp/graf4_defect_percent.png"
+    img4 = "/tmp/graf4_defect_kg.png"
     plt.savefig(img4)
     plt.close()
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img4, "rb"))
 
-    # 📊 График 5 — Топ по браку (кг)
-    top_kg = agg.sort_values("Итого", ascending=False).head(TOP_N)
-
-    plt.figure()
-    plt.bar(top_kg["Имя"], top_kg["Итого"])
-    plt.title(f"Топ по браку (кг) (топ {TOP_N})")
-    plt.xlabel("Пользователь")
-    plt.ylabel("Брак, кг")
-    plt.xticks(rotation=45, ha="right")
-    plt.tight_layout()
-    img5 = "/tmp/graf5_defect_kg.png"
-    plt.savefig(img5)
-    plt.close()
-    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img5, "rb"))
 
 
 
