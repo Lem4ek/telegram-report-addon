@@ -293,6 +293,42 @@ async def cmd_graf(update, context):
     plt.savefig(img3)
     plt.close()
     await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img3, "rb"))
+    # 📊 График 4 — Топ по браку (%)
+    agg = (df.groupby("Имя")[["Вес", "Итого"]]
+             .sum()
+             .reset_index())
+    agg["Процент_брака"] = (agg["Итого"] / agg["Вес"].where(agg["Вес"] != 0)).fillna(0) * 100
+
+    TOP_N = 10  # Сколько пользователей показывать
+    top_percent = agg.sort_values("Процент_брака", ascending=False).head(TOP_N)
+
+    plt.figure()
+    plt.bar(top_percent["Имя"], top_percent["Процент_брака"])
+    plt.title(f"Топ по браку (%) (топ {TOP_N})")
+    plt.xlabel("Пользователь")
+    plt.ylabel("Брак, % от веса")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    img4 = "/tmp/graf4_defect_percent.png"
+    plt.savefig(img4)
+    plt.close()
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img4, "rb"))
+
+    # 📊 График 5 — Топ по браку (кг)
+    top_kg = agg.sort_values("Итого", ascending=False).head(TOP_N)
+
+    plt.figure()
+    plt.bar(top_kg["Имя"], top_kg["Итого"])
+    plt.title(f"Топ по браку (кг) (топ {TOP_N})")
+    plt.xlabel("Пользователь")
+    plt.ylabel("Брак, кг")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    img5 = "/tmp/graf5_defect_kg.png"
+    plt.savefig(img5)
+    plt.close()
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=open(img5, "rb"))
+
 
 
 async def cmd_import(update, context):
