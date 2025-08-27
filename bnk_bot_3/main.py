@@ -636,11 +636,11 @@ async def _post_init(app):
         BotCommand("csv",   "Скачать Excel (или /csv YYYY-MM)"),
         BotCommand("stats", "Показать сводную статистику"),
         BotCommand("graf",  "Построить графики за месяц"),
-        BotCommand("myid",  "Показать мой Telegram ID"),
-        BotCommand("import","Скачать Excel за месяц: /import YYYY-MM"),
-        BotCommand("reset", "Сбросить оперативную статистику"),
-        BotCommand("menu",  "Показать меню с кнопками"),
-        BotCommand("hide",  "Скрыть меню"),
+        #BotCommand("myid",  "Показать мой Telegram ID"),
+        #BotCommand("import","Скачать Excel за месяц: /import YYYY-MM"),
+        #BotCommand("reset", "Сбросить оперативную статистику"),
+        #BotCommand("menu",  "Показать меню с кнопками"),
+        #BotCommand("hide",  "Скрыть меню"),
     ])
 
 
