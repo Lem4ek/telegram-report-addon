@@ -183,7 +183,7 @@ async def delayed_save(message_id):
 
 🧾 Итого отходов: {values.get('Итого', 0.0):.2f} кг
 
-📊 Всего продукции за период: {total_pаков_all:.2f} паков / {total_ves_all:.2f} кг
+📊 Всего продукции за период: {total_pakov_all:.2f} паков / {total_ves_all:.2f} кг
 """.strip()
 
         await bot.send_message(chat_id=chat_id, text=report)
