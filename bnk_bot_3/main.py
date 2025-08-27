@@ -118,9 +118,9 @@ def load_stats_from_excel():
 # ────────────────────────────────────────────────
 def build_main_keyboard() -> ReplyKeyboardMarkup:
     kb = [
-        [KeyboardButton("/graf"), KeyboardButton("/csv")],
-        [KeyboardButton("/stats"), KeyboardButton("/myid")],
-        [KeyboardButton("📥 Импорт месяца…")],
+        [KeyboardButton("/graf"), KeyboardButton("/stats")],
+        [KeyboardButton("/importmenu"), KeyboardButton("/myid")],
+        [KeyboardButton("/csv")],  # можно убрать, если не нужно в клавиатуре
     ]
     return ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=False)
 
@@ -216,21 +216,8 @@ async def handle_message(update, context):
     username = update.effective_user.first_name
     text = update.message.text.strip()
 
-    # Быстрые кнопки: "Импорт месяца…"
-    if text == "📥 Импорт месяца…":
-        pm = prev_month_str()
-        cm = cur_month_str()
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"⬅️ {pm}", callback_data=f"import_month:{pm}"),
-             InlineKeyboardButton(f"📅 {cm}", callback_data=f"import_month:{cm}")],
-        ])
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text="Выберите месяц или введите команду вручную: `/csv YYYY-MM`",
-            reply_markup=kb,
-            parse_mode="Markdown"
-        )
-        return
+    # Здесь больше нет обработки текста "📥 Импорт месяца…"
+    # Всё перенесено в отдельную команду /importmenu
 
     # Обычный отчёт
     if not is_valid_report(text):
@@ -496,6 +483,26 @@ async def cmd_import(update, context):
         await context.bot.send_message(chat_id=update.effective_chat.id, text=f"❌ Ошибка при импорте: {e}")
 
 
+# Команда-меню для выбора месяца (инлайн-кнопки)
+async def cmd_importmenu(update, context):
+    if not is_allowed(update):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
+        return
+
+    pm = prev_month_str()
+    cm = cur_month_str()
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"⬅️ {pm}", callback_data=f"import_month:{pm}"),
+         InlineKeyboardButton(f"📅 {cm}", callback_data=f"import_month:{cm}")],
+    ])
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="Выберите месяц или введите вручную: `/csv YYYY-MM`",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+
+
 # ────────────────────────────────────────────────
 # Inline callback (импорт месяца по кнопке)
 # ────────────────────────────────────────────────
@@ -517,6 +524,7 @@ async def on_callback(update, context):
             document=open(file_path, "rb"),
             filename=f"BNK_{ym}.xlsx"
         )
+
 
 # ────────────────────────────────────────────────
 # Графики
@@ -633,14 +641,15 @@ async def cmd_graf(update, context):
 # ────────────────────────────────────────────────
 async def _post_init(app):
     await app.bot.set_my_commands([
-        BotCommand("csv",   "Скачать Excel (или /csv YYYY-MM)"),
-        BotCommand("stats", "Показать сводную статистику"),
-        BotCommand("graf",  "Построить графики за месяц"),
-        #BotCommand("myid",  "Показать мой Telegram ID"),
-        #BotCommand("import","Скачать Excel за месяц: /import YYYY-MM"),
-        #BotCommand("reset", "Сбросить оперативную статистику"),
-        #BotCommand("menu",  "Показать меню с кнопками"),
-        #BotCommand("hide",  "Скрыть меню"),
+        BotCommand("graf",       "Построить графики за месяц"),
+        BotCommand("stats",      "Показать сводную статистику"),
+        BotCommand("importmenu", "Меню выбора месяца (инлайн-кнопки)"),
+        #BotCommand("import",     "Импорт месяца… (например: /import 2025-07)"),
+        BotCommand("csv",        "Скачать Excel (или /csv YYYY-MM)"),
+        #BotCommand("myid",       "Показать мой Telegram ID"),
+        #BotCommand("reset",      "Сбросить оперативную статистику"),
+        #BotCommand("menu",       "Показать меню с кнопками"),
+        #BotCommand("hide",       "Скрыть меню"),
     ])
 
 
@@ -675,6 +684,9 @@ def main():
 
     # старый импорт: отправьте Excel и в подписи укажите /import
     app.add_handler(MessageHandler(filters.Document.ALL & filters.Caption("/import"), cmd_import))
+
+    # команда меню импорта (инлайн-кнопки)
+    app.add_handler(CommandHandler("importmenu", cmd_importmenu))
 
     # inline callback (кнопки импорта месяца)
     app.add_handler(CallbackQueryHandler(on_callback))
