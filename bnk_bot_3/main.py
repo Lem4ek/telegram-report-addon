@@ -12,6 +12,7 @@ from telegram import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     Update,
+    BotCommand,  # ← добавлено
 )
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, CallbackQueryHandler
 
@@ -565,6 +566,7 @@ async def cmd_graf(update, context):
     for x, y in zip(daily["Дата"], daily["Итого"]):
         ax.text(x, y + dy, f"{y:.0f}", ha="center", va="bottom", fontsize=8)
 
+    fig.tight_LAYOUT = True
     fig.tight_layout()
     img1 = "/tmp/graf1_daily.png"
     fig.savefig(img1)
@@ -631,6 +633,22 @@ async def cmd_graf(update, context):
 
 
 # ────────────────────────────────────────────────
+# Регистрация команд в подсказках Telegram
+# ────────────────────────────────────────────────
+async def _post_init(app):
+    await app.bot.set_my_commands([
+        BotCommand("csv",   "Скачать Excel (или /csv YYYY-MM)"),
+        BotCommand("stats", "Показать сводную статистику"),
+        BotCommand("graf",  "Построить графики за месяц"),
+        BotCommand("myid",  "Показать мой Telegram ID"),
+        BotCommand("import","Загрузить Excel за месяц: /import YYYY-MM"),
+        #BotCommand("reset", "Сбросить оперативную статистику"),
+        #BotCommand("menu",  "Показать меню с кнопками"),
+        #BotCommand("hide",  "Скрыть меню"),
+    ])
+
+
+# ────────────────────────────────────────────────
 # Точка входа
 # ────────────────────────────────────────────────
 def main():
@@ -664,7 +682,8 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
 
-    app.run_polling()
+    # ← теперь с post_init, чтобы /graf появился в подсказках
+    app.run_polling(post_init=_post_init)
 
 
 if __name__ == "__main__":
