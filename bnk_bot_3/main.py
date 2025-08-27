@@ -642,9 +642,9 @@ async def _post_init(app):
         BotCommand("graf",  "Построить графики за месяц"),
         BotCommand("myid",  "Показать мой Telegram ID"),
         BotCommand("import","Загрузить Excel за месяц: /import YYYY-MM"),
-        #BotCommand("reset", "Сбросить оперативную статистику"),
-        #BotCommand("menu",  "Показать меню с кнопками"),
-        #BotCommand("hide",  "Скрыть меню"),
+        BotCommand("reset", "Сбросить оперативную статистику"),
+        BotCommand("menu",  "Показать меню с кнопками"),
+        BotCommand("hide",  "Скрыть меню"),
     ])
 
 
