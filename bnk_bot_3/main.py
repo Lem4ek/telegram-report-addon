@@ -657,33 +657,14 @@ def main():
 
     load_stats_from_excel()
 
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = (
+    ApplicationBuilder()
+    .token(TOKEN)
+    .post_init(_post_init)   # ← вот так
+    .build()
+)
 
-    # меню и клавиатура
-    app.add_handler(CommandHandler("start", cmd_start_menu))
-    app.add_handler(CommandHandler("menu", cmd_start_menu))
-    app.add_handler(CommandHandler("hide", cmd_hide))
-
-    app.add_handler(CommandHandler("csv", cmd_csv))
-    app.add_handler(CommandHandler("stats", cmd_stats))
-    app.add_handler(CommandHandler("reset", cmd_reset))
-    app.add_handler(CommandHandler("myid", cmd_myid))
-
-    # новая команда: /import YYYY-MM -> отдать файл месяца
-    app.add_handler(CommandHandler("import", cmd_import_month))
-
-    # старый импорт: отправьте Excel и в подписи укажите /import
-    app.add_handler(MessageHandler(filters.Document.ALL & filters.Caption("/import"), cmd_import))
-
-    # inline callback (кнопки импорта месяца)
-    app.add_handler(CallbackQueryHandler(on_callback))
-
-    app.add_handler(CommandHandler("graf", cmd_graf))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
-
-    # ← теперь с post_init, чтобы /graf появился в подсказках
-    app.run_polling(post_init=_post_init)
+app.run_polling()  
 
 
 if __name__ == "__main__":
