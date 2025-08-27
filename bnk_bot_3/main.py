@@ -645,7 +645,7 @@ async def _post_init(app):
         BotCommand("stats",      "Показать сводную статистику"),
         BotCommand("importmenu", "Меню выбора месяца (инлайн-кнопки)"),
         #BotCommand("import",     "Импорт месяца… (например: /import 2025-07)"),
-        BotCommand("csv",        "Скачать Excel (или /csv YYYY-MM)"),
+        #BotCommand("csv",        "Скачать Excel (или /csv YYYY-MM)"),
         #BotCommand("myid",       "Показать мой Telegram ID"),
         #BotCommand("reset",      "Сбросить оперативную статистику"),
         #BotCommand("menu",       "Показать меню с кнопками"),
