@@ -12,7 +12,7 @@ from telegram import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     Update,
-    BotCommand,  # ← добавлено
+    BotCommand,
 )
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, CallbackQueryHandler
 
@@ -20,7 +20,7 @@ from parser import parse_message
 from data_utils import save_entry, generate_stats, get_csv_file, get_month_file_str
 
 # ────────────────────────────────────────────────
-# Конфигурация
+# Конфигурация и доступ
 # ────────────────────────────────────────────────
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
@@ -36,16 +36,15 @@ def _parse_ids(s: str) -> set[int]:
             pass
     return ids
 
-# Пример: ALLOWED_USER_IDS="1198365511,508532161"
 ALLOWED_USER_IDS: set[int] = _parse_ids(os.getenv("ALLOWED_USER_IDS", ""))
 if not ALLOWED_USER_IDS:
     print("[WARN] ALLOWED_USER_IDS не задан — доступ будет закрыт всем пользователям.")
 else:
     print(f"[INFO] Разрешенные ID: {sorted(ALLOWED_USER_IDS)}")
 
-user_stats = {}
+user_stats: dict[str, dict] = {}
 current_month = datetime.now().month
-pending_updates = {}
+pending_updates: dict[int, dict] = {}
 
 SAVE_DELAY = timedelta(minutes=2)  # задержка перед записью/отправкой
 
@@ -60,7 +59,7 @@ def safe_float(value):
         return 0.0
 
 
-def is_allowed(update: Update):
+def is_allowed(update: Update) -> bool:
     try:
         user_id = update.effective_user.id
     except Exception:
@@ -92,7 +91,7 @@ def load_stats_from_excel():
     ws = wb.active
 
     for row in ws.iter_rows(min_row=2, values_only=True):
-        date, user, pakov, ves, paket, flexa, extru, itogo = row
+        _date_cell, user, pakov, ves, paket, flexa, extru, itogo = row
         if not user:
             continue
 
@@ -129,9 +128,7 @@ def prev_month_str(today: _date | None = None) -> str:
     if today is None:
         today = _date.today()
     y, m = today.year, today.month
-    if m == 1:
-        return f"{y-1}-12"
-    return f"{y}-{m-1:02d}"
+    return f"{y-1}-12" if m == 1 else f"{y}-{m-1:02d}"
 
 def cur_month_str(today: _date | None = None) -> str:
     if today is None:
@@ -142,7 +139,7 @@ def cur_month_str(today: _date | None = None) -> str:
 # ────────────────────────────────────────────────
 # Сохранение отчёта с задержкой (debounce)
 # ────────────────────────────────────────────────
-async def delayed_save(message_id):
+async def delayed_save(message_id: int):
     try:
         await asyncio.sleep(SAVE_DELAY.total_seconds())
         if message_id not in pending_updates:
@@ -154,7 +151,7 @@ async def delayed_save(message_id):
         username = data["user"]
         values = data["values"]
 
-        # 1) Сохраняем в Excel (ротация по месяцу внутри save_entry)
+        # 1) Сохраняем в Excel (файл текущего месяца)
         save_entry(data["time"], username, values)
 
         # 2) Обновляем оперативную статистику
@@ -219,9 +216,8 @@ async def handle_message(update, context):
     username = update.effective_user.first_name
     text = update.message.text.strip()
 
-    # быстрые кнопки: "Импорт месяца…"
+    # Быстрые кнопки: "Импорт месяца…"
     if text == "📥 Импорт месяца…":
-        # показать inline-клавиатуру с готовыми месяцами
         pm = prev_month_str()
         cm = cur_month_str()
         kb = InlineKeyboardMarkup([
@@ -230,13 +226,13 @@ async def handle_message(update, context):
         ])
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text="Выберите месяц или введите команду вручную: `/import YYYY-MM`",
+            text="Выберите месяц или введите команду вручную: `/csv YYYY-MM`",
             reply_markup=kb,
             parse_mode="Markdown"
         )
         return
 
-    # обычный отчёт
+    # Обычный отчёт
     if not is_valid_report(text):
         return
 
@@ -319,13 +315,13 @@ async def cmd_hide(update, context):
         reply_markup=ReplyKeyboardRemove()
     )
 
+# /csv или /csv YYYY-MM
 async def cmd_csv(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
         return
 
-    # если передан аргумент формата YYYY-MM — шлём файл за этот месяц
-    if context.args:
+    if context.args:  # /csv 2025-07
         ym = context.args[0].strip()
         from datetime import datetime as _dt
         try:
@@ -337,12 +333,7 @@ async def cmd_csv(update, context):
             )
             return
 
-        try:
-            from data_utils import get_month_file_str
-            file_path = get_month_file_str(ym)
-        except Exception:
-            file_path = os.path.join("/config/bnk_bot/data", f"{ym}.xlsx")
-
+        file_path = get_month_file_str(ym)
         if not os.path.exists(file_path):
             await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Файл за {ym} не найден.")
             return
@@ -354,7 +345,7 @@ async def cmd_csv(update, context):
         )
         return
 
-    # без аргументов — шлём текущий месяц
+    # текущий месяц
     file_path = get_csv_file()
     if not os.path.exists(file_path):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="❌ Файл данных не найден.")
@@ -365,7 +356,6 @@ async def cmd_csv(update, context):
         document=open(file_path, 'rb'),
         filename=f"BNK_{datetime.now():%Y-%m}.xlsx"
     )
-
 
 async def cmd_stats(update, context):
     if not is_allowed(update):
@@ -431,18 +421,25 @@ async def cmd_import(update, context):
     if not is_allowed(update):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⛔ Нет доступа.")
         return
+
+    # Безопасно берём сообщение
+    msg = update.effective_message
+    if not msg or not getattr(msg, "document", None):
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="📄 Пожалуйста, отправьте Excel-файл (и в подписи укажите /import)."
+        )
+        return
+
+    # Удалим текущий Excel-файл и сбросим статистику
     from pathlib import Path
     current_file = Path(get_csv_file())
     if current_file.exists():
         current_file.unlink()
         user_stats.clear()
 
-    if not update.message.document:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="📄 Пожалуйста, отправьте Excel-файл.")
-        return
-
-    file = await update.message.document.get_file()
-    file_path = f"/tmp/imported.xlsx"
+    file = await msg.document.get_file()
+    file_path = "/tmp/imported.xlsx"
     await file.download_to_drive(file_path)
 
     try:
@@ -457,11 +454,11 @@ async def cmd_import(update, context):
 
             try:
                 if isinstance(date_str, str):
-                    date = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
+                    date_obj = datetime.strptime(date_str, "%Y-%m-%d %H:%M")
                 else:
-                    date = date_str
+                    date_obj = date_str
             except Exception:
-                date = datetime.now()
+                date_obj = datetime.now()
 
             values = {
                 "Паков": pakov or 0,
@@ -472,7 +469,7 @@ async def cmd_import(update, context):
                 "Итого": itogo or 0
             }
 
-            save_entry(date, user, values)
+            save_entry(date_obj, user, values)
 
             if user not in user_stats:
                 user_stats[user] = {
@@ -566,7 +563,6 @@ async def cmd_graf(update, context):
     for x, y in zip(daily["Дата"], daily["Итого"]):
         ax.text(x, y + dy, f"{y:.0f}", ha="center", va="bottom", fontsize=8)
 
-    fig.tight_LAYOUT = True
     fig.tight_layout()
     img1 = "/tmp/graf1_daily.png"
     fig.savefig(img1)
@@ -641,7 +637,7 @@ async def _post_init(app):
         BotCommand("stats", "Показать сводную статистику"),
         BotCommand("graf",  "Построить графики за месяц"),
         BotCommand("myid",  "Показать мой Telegram ID"),
-        BotCommand("import","Загрузить Excel за месяц: /import YYYY-MM"),
+        BotCommand("import","Скачать Excel за месяц: /import YYYY-MM"),
         BotCommand("reset", "Сбросить оперативную статистику"),
         BotCommand("menu",  "Показать меню с кнопками"),
         BotCommand("hide",  "Скрыть меню"),
@@ -658,13 +654,36 @@ def main():
     load_stats_from_excel()
 
     app = (
-    ApplicationBuilder()
-    .token(TOKEN)
-    .post_init(_post_init)   # ← вот так
-    .build()
-)
+        ApplicationBuilder()
+        .token(TOKEN)
+        .post_init(_post_init)   # регистрируем команды для подсказок “/”
+        .build()
+    )
 
-app.run_polling()  
+    # меню и клавиатура
+    app.add_handler(CommandHandler("start", cmd_start_menu))
+    app.add_handler(CommandHandler("menu", cmd_start_menu))
+    app.add_handler(CommandHandler("hide", cmd_hide))
+
+    app.add_handler(CommandHandler("csv", cmd_csv))
+    app.add_handler(CommandHandler("stats", cmd_stats))
+    app.add_handler(CommandHandler("reset", cmd_reset))
+    app.add_handler(CommandHandler("myid", cmd_myid))
+
+    # /import YYYY-MM -> отдать файл месяца
+    app.add_handler(CommandHandler("import", cmd_import_month))
+
+    # старый импорт: отправьте Excel и в подписи укажите /import
+    app.add_handler(MessageHandler(filters.Document.ALL & filters.Caption("/import"), cmd_import))
+
+    # inline callback (кнопки импорта месяца)
+    app.add_handler(CallbackQueryHandler(on_callback))
+
+    app.add_handler(CommandHandler("graf", cmd_graf))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, handle_edited_message))
+
+    app.run_polling()
 
 
 if __name__ == "__main__":
